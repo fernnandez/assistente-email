@@ -1,0 +1,45 @@
+{
+  "name": "assistente-email",
+  "version": "0.1.0",
+  "description": "Assistente local que rascunha respostas de e-mail com políticas e histórico do Pipedrive",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "concurrently -k -n api,web \"tsx watch --env-file=.env src/main.ts\" \"vite --config web/vite.config.ts\"",
+    "build": "vite build --config web/vite.config.ts",
+    "start": "tsx --env-file=.env src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx --env-file=.env scripts/eval.ts",
+    "demo:seed": "tsx --env-file=.env scripts/demo-seed.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "private": "true",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "4.0.108",
+    "@fastify/static": "10.1.8",
+    "ai": "7.0.162",
+    "better-sqlite3": "13.0.3",
+    "fastify": "5.12.8",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "concurrently": "10.0.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.1.0"
+  }
+}
