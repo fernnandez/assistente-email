@@ -1,0 +1,20 @@
+{
+  "padaria": {
+    "org": "Padaria Pão Quente",
+    "name": "Bruna Andrade",
+    "job_title": "Gerente",
+    "emails": ["demo.padaria@example.com"]
+  },
+  "sycode": {
+    "org": "Sycode",
+    "name": "Bruna Andrade",
+    "job_title": "Head de Operações",
+    "emails": ["demo.sycode@example.com"]
+  },
+  "credentialhub": {
+    "org": "CredentialHub",
+    "name": "Bruna Andrade",
+    "job_title": "Fundadora",
+    "emails": ["demo.credentialhub@example.com"]
+  }
+}
