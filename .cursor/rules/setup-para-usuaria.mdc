@@ -1,0 +1,12 @@
+---
+description: Setup local para a usuária final (namorada) e agentes de IA
+alwaysApply: true
+---
+
+# Setup deste repo
+
+- Usuária final roda o app **local** no Mac dela; costuma pedir a um assistente (Claude/Cursor) para configurar.
+- Playbook para agentes: [`CLAUDE.md`](CLAUDE.md). Comando headless: `npm run configure`.
+- Segredos (Google, LLM, Pipedrive) vão para a UI ou `scripts/configure.ts` → SQLite em `data/` — **nunca** commit.
+- OAuth Gmail exige clique humano em **Conectar Gmail**.
+- Start humano no Mac: `Abrir Assistente.command` (background; Terminal fecha). Parar: `Encerrar Assistente.command`.

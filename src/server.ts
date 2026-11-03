@@ -3,12 +3,16 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { config, configProblems } from './config';
+import { config } from './config';
 import type { Store } from './db';
+import {
+  createPolicy, deletePolicy, DocsError, listDocs, listPolicies, readDoc, readPolicy, seedExamplePolicies, writePolicy,
+} from './docsfiles';
 import { GmailError, type GmailClient } from './gmail';
 import { buildReply, defaultDeps, draftArgsFor, emailFromItem, type PipelineDeps } from './pipeline';
 import { bus, type Poller } from './poller';
 import { loadPolicies } from './policies';
+import { bindSettings, configProblems, publicSettings, runtime, saveSettings, settingsPatchSchema, setupStatus } from './settings';
 import type { Item } from './types';
 
 export interface ServerCtx {
@@ -23,6 +27,7 @@ const view = (i: Item) => ({ ...i, customer: i.customer_json ? JSON.parse(i.cust
 
 export function buildServer(ctx: ServerCtx): FastifyInstance {
   const { store, gmail } = ctx;
+  bindSettings(store);
   const port = ctx.port ?? config.port;
   const deps = ctx.deps ?? defaultDeps;
   const app = Fastify({ logger: false });
@@ -40,6 +45,7 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
   });
 
   app.setErrorHandler((err, _req, reply) => {
+    if (err instanceof DocsError) return reply.code(err.statusCode).send({ error: err.message });
     const status = err instanceof GmailError && err.status >= 400 && err.status < 600 ? (err.status === 401 ? 401 : 502) : (err as { statusCode?: number }).statusCode ?? 500;
     reply.code(status).send({ error: err instanceof Error ? err.message : String(err) });
   });
@@ -47,21 +53,67 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
   // ── estado
   app.get('/api/status', async () => {
     const pol = loadPolicies();
+    const r = runtime(store);
+    const connected = gmail.isConnected();
     return {
-      gmail: { connected: gmail.isConnected(), needsReauth: gmail.needsReauth(), email: gmail.email() },
-      problems: configProblems(),
+      gmail: { connected, needsReauth: gmail.needsReauth(), email: gmail.email() },
+      problems: configProblems(store),
       policies: { files: pol.files, chars: pol.chars, truncated: pol.truncated },
       lastPollAt: store.getState('last_poll_at'),
       lastError: store.getState('last_error'),
       pollSeconds: config.pollSeconds,
       counts: store.counts(),
-      model: config.llm.model,
+      model: r.llm.model,
+      setup: setupStatus({ store, gmailConnected: connected, policiesCount: pol.files.length }),
     };
+  });
+
+  // ── configuração (Google, LLM, Pipedrive) — salva no SQLite; .env é fallback
+  app.get('/api/settings', async () => publicSettings(store));
+  app.put('/api/settings', async (req) => {
+    const patch = settingsPatchSchema.parse(req.body ?? {});
+    const out = saveSettings(store, patch);
+    bus.emit('change', { type: 'status' });
+    return out;
+  });
+
+  // ── guias (docs/*.md, só leitura)
+  app.get('/api/docs', async () => ({ files: listDocs() }));
+  app.get('/api/docs/:name', async (req) => readDoc((req.params as { name: string }).name));
+
+  // ── políticas (policies/*.md, CRUD)
+  app.get('/api/policies', async () => ({ files: listPolicies() }));
+  app.get('/api/policies/:name', async (req) => readPolicy((req.params as { name: string }).name));
+  app.put('/api/policies/:name', async (req) => {
+    const name = (req.params as { name: string }).name;
+    const { content } = z.object({ content: z.string() }).parse(req.body ?? {});
+    const out = writePolicy(name, content);
+    bus.emit('change', { type: 'status' });
+    return out;
+  });
+  app.post('/api/policies', async (req) => {
+    const { name, content } = z.object({ name: z.string(), content: z.string().optional() }).parse(req.body ?? {});
+    const out = createPolicy(name, content ?? '');
+    bus.emit('change', { type: 'status' });
+    return out;
+  });
+  app.post('/api/policies/seed-examples', async () => {
+    const out = seedExamplePolicies();
+    bus.emit('change', { type: 'status' });
+    return out;
+  });
+  app.delete('/api/policies/:name', async (req) => {
+    deletePolicy((req.params as { name: string }).name);
+    bus.emit('change', { type: 'status' });
+    return { ok: true };
   });
 
   // ── login com o Google
   app.get('/auth/google', async (_req, reply) => {
-    if (!config.google.clientId || !config.google.clientSecret) return reply.code(400).send({ error: 'Defina GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no .env.' });
+    const g = runtime(store).google;
+    if (!g.clientId || !g.clientSecret) {
+      return reply.code(400).send({ error: 'Configure o Google na aba Configuração (Client ID e Client Secret).' });
+    }
     return reply.redirect(gmail.startAuth(port).url);
   });
   app.get('/oauth/callback', async (req, reply) => {
@@ -146,10 +198,11 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
     if (item.status !== 'pending' && item.status !== 'error') throw Object.assign(new Error('Só dá para refazer itens pendentes ou com erro.'), { statusCode: 409 });
     const { instruction } = z.object({ instruction: z.string().max(2000).optional() }).parse(req.body ?? {});
     const built = await buildReply(emailFromItem(item), deps, instruction);
+    const model = runtime(store).llm.model;
     const patch = {
       status: 'pending' as const, error: null, risk: built.reply.risk, category: built.reply.category, risk_reasons: built.reply.risk_reasons,
       reply_subject: built.reply.reply_subject, reply_body: built.reply.reply_body, internal_notes: built.reply.internal_notes,
-      customer_json: JSON.stringify(built.customer), model: config.llm.model, tokens_in: built.tokensIn, tokens_out: built.tokensOut,
+      customer_json: JSON.stringify(built.customer), model, tokens_in: built.tokensIn, tokens_out: built.tokensOut,
     };
     const draftId = await syncDraft(item, patch.reply_subject, patch.reply_body);
     return view(store.updateItem(item.id, { ...patch, draft_id: draftId }));

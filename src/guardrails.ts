@@ -1,4 +1,5 @@
 import { config } from './config';
+import { runtime } from './settings';
 import type { GuardedReply, IncomingEmail, ModelReply, Risk } from './types';
 
 const ORDER: Record<Risk, number> = { low: 0, medium: 1, high: 2 };
@@ -43,7 +44,11 @@ export function applyGuardrails(args: {
     risk,
     risk_reasons: reasons.join('; '),
     reply_subject: result?.reply_subject?.trim() || `Re: ${email.subject}`,
-    reply_body: ensureSignature(body, args.signature ?? config.signature, args.signatureEn ?? config.signatureEn),
+    reply_body: ensureSignature(
+      body,
+      args.signature ?? runtime().company.signature,
+      args.signatureEn ?? runtime().company.signatureEn,
+    ),
     internal_notes: result?.internal_notes || (result ? '' : 'O modelo não retornou uma saída válida: usado texto padrão. Revise com atenção.'),
     guardrailReasons: reasons.filter((r) => r.startsWith('[guardrail]')),
   };

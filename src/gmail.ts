@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { config, redirectUri } from './config';
 import type { Store } from './db';
+import { runtime } from './settings';
 import type { IncomingEmail } from './types';
 
 export const SCOPES = [
@@ -139,12 +140,13 @@ export class GmailClient {
 
   // OAuth (PKCE, redirecionamento para este servidor local)
   startAuth(port = config.port): { url: string } {
+    const { clientId } = runtime(this.store).google;
     const verifier = randomBytes(32).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
     const state = randomBytes(16).toString('hex');
     this.pending.set(state, verifier);
     const q = new URLSearchParams({
-      client_id: config.google.clientId, redirect_uri: redirectUri(port), response_type: 'code',
+      client_id: clientId, redirect_uri: redirectUri(port), response_type: 'code',
       scope: SCOPES.join(' '), access_type: 'offline', prompt: 'consent',
       code_challenge: challenge, code_challenge_method: 'S256', state,
     });
@@ -173,10 +175,11 @@ export class GmailClient {
   }
 
   private async tokenRequest(params: Record<string, string>) {
+    const { clientId, clientSecret } = runtime(this.store).google;
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: config.google.clientId, client_secret: config.google.clientSecret, ...params }),
+      body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, ...params }),
       signal: AbortSignal.timeout(20000),
     });
     const json = (await res.json()) as { access_token: string; expires_in: number; refresh_token?: string; error?: string; error_description?: string };

@@ -1,4 +1,4 @@
-import { config } from './config';
+import { runtime } from './settings';
 import type { Customer } from './types';
 
 // ───────── formatação (pura, testável) ─────────
@@ -45,12 +45,16 @@ export function formatCustomer(args: {
 // ───────── chamadas à API (somente leitura) ─────────
 
 const NEW_CONTACT = 'Contato NOVO: nenhum cadastro no Pipedrive para este e-mail.';
-export const isPipedriveConfigured = () => !!(config.pipedrive.domain && config.pipedrive.token);
+export const isPipedriveConfigured = () => {
+  const pdCfg = runtime().pipedrive;
+  return !!(pdCfg.domain && pdCfg.token);
+};
 
 async function pd<T>(path: string, params: Record<string, string | number> = {}): Promise<T> {
-  const url = new URL(`https://${config.pipedrive.domain}.pipedrive.com/api${path}`);
+  const pdCfg = runtime().pipedrive;
+  const url = new URL(`https://${pdCfg.domain}.pipedrive.com/api${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-  url.searchParams.set('api_token', config.pipedrive.token);
+  url.searchParams.set('api_token', pdCfg.token);
   const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`Pipedrive ${path}: HTTP ${res.status}`);
   const json = (await res.json()) as { success?: boolean; data?: T; error?: string };

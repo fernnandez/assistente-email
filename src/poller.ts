@@ -3,6 +3,7 @@ import { config } from './config';
 import type { Store } from './db';
 import type { GmailClient } from './gmail';
 import { handleIncoming, type PipelineDeps } from './pipeline';
+import { runtime } from './settings';
 
 /** Avisa a interface (SSE) de que algo mudou. */
 export const bus = new EventEmitter();
@@ -20,7 +21,7 @@ export function startPoller(args: { store: Store; gmail: GmailClient; deps?: Pip
       const { ids, nextHistoryId } = await gmail.pollNewMessageIds();
       for (const id of ids) {
         const email = await gmail.getEmail(id);
-        const item = await handleIncoming(email, { store, gmail, deps: args.deps, model: config.llm.model });
+        const item = await handleIncoming(email, { store, gmail, deps: args.deps, model: runtime(store).llm.model });
         if (item && item.status !== 'ignored') bus.emit('change', { type: 'item', id: item.id, status: item.status });
       }
       gmail.commitHistory(nextHistoryId); // só avança depois de processar tudo

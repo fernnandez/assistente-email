@@ -34,12 +34,13 @@ Anote o **ID do cliente** e a **chave secreta do cliente**. Para apps de computa
 https://admin.google.com → *Segurança → Controle de acesso e de dados → Controles de API*
 (os nomes do menu variam com o idioma). Se o acesso de apps de terceiros estiver restrito, configure o app pelo **ID do cliente** e marque como **Confiável**. Se não houver restrição, não precisa fazer nada.
 
-## 7. Preencher o `.env`
-```
-GOOGLE_CLIENT_ID=<ID do cliente>
-GOOGLE_CLIENT_SECRET=<chave secreta do cliente>
-```
-Depois `npm start`, abra http://127.0.0.1:3210 e clique em **Conectar Gmail**. A autorização é feita com a conta dela, no navegador.
+## 7. Colar na aplicação
+1. `npm start` e abra http://127.0.0.1:3210.
+2. Vá em **Configuração → Google**.
+3. Cole o **ID do cliente** e a **chave secreta do cliente** → *Salvar configuração*.
+4. Clique em **Conectar Gmail**. A autorização é feita com a conta dela, no navegador.
+
+(Opcional: as mesmas variáveis `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` no `.env` ainda funcionam como reserva se a tela estiver vazia.)
 
 ## O que NÃO foi comprovado
 - Pela documentação do Google, apps internos não precisam de verificação e o token não deve expirar em 7 dias (a regra dos 7 dias vale para apps externos em modo de teste). **Confirme na prática:** anote a data da primeira autorização e verifique, uma semana depois, se o app continua conectado.

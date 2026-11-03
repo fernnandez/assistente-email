@@ -28,12 +28,3 @@ export const config = {
 };
 
 export const redirectUri = (port = config.port): string => `http://127.0.0.1:${port}/oauth/callback`;
-
-/** Itens do .env que faltam para o app funcionar (mostrados na tela inicial). */
-export function configProblems(): string[] {
-  const p: string[] = [];
-  if (!config.google.clientId || !config.google.clientSecret) p.push('GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (cliente OAuth do Google Cloud)');
-  if (!config.llm.apiKey) p.push('LLM_API_KEY (chave da OpenAI ou do gateway)');
-  if (!config.pipedrive.domain || !config.pipedrive.token) p.push('PIPEDRIVE_DOMAIN / PIPEDRIVE_API_TOKEN (opcional: sem isso o histórico do cliente não é usado)');
-  return p;
-}

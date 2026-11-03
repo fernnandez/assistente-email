@@ -2,7 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { generateText, Output } from 'ai';
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
-import { config } from './config';
+import { runtime } from './settings';
 import { CATEGORIES, type ModelReply } from './types';
 
 export const modelReplySchema = z.object({
@@ -23,20 +23,22 @@ export interface LlmResult {
 
 /** Lê prompts/system.md e troca os marcadores de empresa e assinatura. */
 export function systemPrompt(): string {
+  const co = runtime().company;
   const raw = readFileSync(new URL('../prompts/system.md', import.meta.url), 'utf8');
   return raw
-    .replaceAll('{{EMPRESA}}', config.company)
-    .replaceAll('{{ASSINATURA_EN}}', config.signatureEn)
-    .replaceAll('{{ASSINATURA}}', config.signature)
+    .replaceAll('{{EMPRESA}}', co.name)
+    .replaceAll('{{ASSINATURA_EN}}', co.signatureEn)
+    .replaceAll('{{ASSINATURA}}', co.signature)
     .trim();
 }
 
 /** Chama o modelo (qualquer endpoint compatível com a API da OpenAI: OpenAI, Vercel AI Gateway, Ollama...). */
 export async function callModel(system: string, user: string): Promise<LlmResult> {
-  const provider = createOpenAI({ baseURL: config.llm.baseUrl, apiKey: config.llm.apiKey });
+  const llm = runtime().llm;
+  const provider = createOpenAI({ baseURL: llm.baseUrl, apiKey: llm.apiKey });
   try {
     const r = await generateText({
-      model: provider.chat(config.llm.model),
+      model: provider.chat(llm.model),
       output: Output.object({ schema: modelReplySchema }),
       system,
       prompt: user,
