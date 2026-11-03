@@ -1,0 +1,51 @@
+:root { --bg: #f6f7f9; --card: #fff; --line: #e3e6ea; --text: #1d2430; --muted: #6a7585; --brand: #2563eb; --low: #16a34a; --medium: #d97706; --high: #dc2626; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+.app { max-width: 1280px; margin: 0 auto; padding: 16px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.top h1 { font-size: 20px; margin: 0; }
+.chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.chip { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; color: var(--muted); }
+.chip.ok { color: var(--low); }
+.btn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 7px 14px; cursor: pointer; font: inherit; text-decoration: none; display: inline-block; }
+.btn:hover:not(:disabled) { border-color: #b7bec8; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.danger { color: var(--high); }
+.btn.link { border: none; background: none; color: var(--brand); padding: 4px 0; }
+.banner { border-radius: 8px; padding: 10px 14px; margin: 8px 0; font-size: 14px; }
+.banner ul { margin: 6px 0 0 18px; padding: 0; }
+.banner.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+.banner.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+.cols { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; margin-top: 12px; }
+@media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+.list, .detail { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tab { flex: 1; border: none; background: none; padding: 12px; cursor: pointer; font: inherit; color: var(--muted); border-bottom: 2px solid transparent; }
+.tab.on { color: var(--text); border-bottom-color: var(--brand); font-weight: 600; }
+.row { display: grid; grid-template-columns: 14px 1fr; gap: 2px 8px; width: 100%; text-align: left; border: none; border-bottom: 1px solid var(--line); background: none; padding: 12px 14px; cursor: pointer; font: inherit; }
+.row.sel { background: #eff6ff; }
+.row .dot { grid-row: 1 / span 3; margin-top: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #c4cad3; display: inline-block; }
+.dot.low { background: var(--low); } .dot.medium { background: var(--medium); } .dot.high, .dot.err { background: var(--high); }
+.who { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.subj { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { color: var(--muted); font-size: 12px; }
+.empty { color: var(--muted); padding: 24px; text-align: center; }
+.detail-in { padding: 18px 20px 24px; }
+.head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.head h2 { margin: 0 0 4px; font-size: 18px; }
+.from { color: var(--muted); font-size: 13px; }
+.tag { margin-left: 8px; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 1px 8px; font-size: 12px; }
+.tag.new { background: #fef3c7; color: #92400e; }
+.badge { border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; }
+.badge.low { background: var(--low); } .badge.medium { background: var(--medium); } .badge.high { background: var(--high); }
+.reasons, .notes { font-size: 14px; margin: 10px 0; padding: 8px 12px; border-radius: 8px; background: #f8fafc; border: 1px solid var(--line); }
+.notes { background: #fffbeb; border-color: #fde68a; }
+h3 { font-size: 14px; margin: 18px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.orig { white-space: pre-wrap; word-break: break-word; background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: inherit; margin: 0; max-height: 260px; overflow: auto; }
+.orig.crm { font-size: 13px; margin-top: 6px; }
+textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font: inherit; resize: vertical; }
+.actions { display: flex; gap: 8px; margin-top: 12px; }
+.regen { display: flex; gap: 8px; margin-top: 12px; }
+.regen input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font: inherit; }
