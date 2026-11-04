@@ -24,6 +24,7 @@ export function App() {
   const [status, setStatus] = useState<StatusInfo | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [filter, setFilter] = useState<InboxFilter>('unread');
+  const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>('Notification' in window ? Notification.permission : 'unsupported');
@@ -78,8 +79,17 @@ export function App() {
   const archivedCount = status?.counts.archived ?? 0;
   useEffect(() => { document.title = unreadCount ? `(${unreadCount}) Assistente de e-mail` : 'Assistente de e-mail'; }, [unreadCount]);
 
-  const selected = useMemo(() => items.find((i) => i.id === selectedId) ?? null, [items, selectedId]);
-  useEffect(() => { if (selectedId === null && items.length) setSelectedId(items[0].id); }, [items, selectedId]);
+  const sortedItems = useMemo(() => {
+    const copy = [...items];
+    copy.sort((a, b) => {
+      const cmp = a.received_at.localeCompare(b.received_at);
+      return sort === 'oldest' ? cmp : -cmp;
+    });
+    return copy;
+  }, [items, sort]);
+
+  const selected = useMemo(() => sortedItems.find((i) => i.id === selectedId) ?? null, [sortedItems, selectedId]);
+  useEffect(() => { if (selectedId === null && sortedItems.length) setSelectedId(sortedItems[0].id); }, [sortedItems, selectedId]);
 
   function runSync() {
     const ok = window.confirm(
@@ -190,12 +200,16 @@ export function App() {
               <button className={filter === 'sent' ? 'tab on' : 'tab'} onClick={() => { setFilter('sent'); setSelectedId(null); }}>Respondidos ({sentCount})</button>
               <button className={filter === 'archived' ? 'tab on' : 'tab'} onClick={() => { setFilter('archived'); setSelectedId(null); }}>Arquivados ({archivedCount})</button>
             </div>
-            {items.length === 0 && (
+            <div className="sort-row">
+              <button type="button" className={sort === 'newest' ? 'sort-btn on' : 'sort-btn'} onClick={() => setSort('newest')}>Mais novos</button>
+              <button type="button" className={sort === 'oldest' ? 'sort-btn on' : 'sort-btn'} onClick={() => setSort('oldest')}>Mais antigos</button>
+            </div>
+            {sortedItems.length === 0 && (
               <p className="empty">
                 {filter === 'unread' ? 'Nenhum não lido na fila.' : filter === 'sent' ? 'Nenhum respondido ainda.' : 'Nenhum arquivado ainda.'}
               </p>
             )}
-            {items.map((i) => (
+            {sortedItems.map((i) => (
               <button key={i.id} className={`row ${i.id === selected?.id ? 'sel' : ''}`} onClick={() => setSelectedId(i.id)}>
                 <span className={`dot ${i.status === 'error' ? 'err' : i.risk ?? ''}`} />
                 <span className="who">{i.from_name || i.from_email}</span>

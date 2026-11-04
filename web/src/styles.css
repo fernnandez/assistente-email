@@ -246,6 +246,31 @@ body {
   box-shadow: inset 0 -1px 0 #fff;
 }
 
+.sort-row {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.sort-btn {
+  flex: 1;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.sort-btn:hover { color: var(--ink); background: rgba(255,255,255,0.55); }
+.sort-btn.on {
+  color: var(--brand);
+  background: #fff;
+  border-color: var(--line);
+}
+
 .row {
   display: grid;
   grid-template-columns: 10px 1fr;
