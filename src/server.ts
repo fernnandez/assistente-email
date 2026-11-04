@@ -155,8 +155,14 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
         .sort((a, b) => b.received_at.localeCompare(a.received_at))
         .map(view);
     }
-    const status = s === 'pending' || s === 'sent' || s === 'discarded' || s === 'archived' || s === 'error' ? s : 'visible';
-    return store.listItems(status).map(view);
+    if (s === 'all' || s === 'visible' || !s) {
+      return store.listItems('visible').map(view);
+    }
+    if (s === 'pending' || s === 'sent' || s === 'discarded' || s === 'archived' || s === 'error') {
+      return store.listItems(s).map(view);
+    }
+    // Evita cair em "tudo" por typo/versão antiga (antes unread virava a lista inteira).
+    throw Object.assign(new Error(`Filtro de status inválido: ${s}`), { statusCode: 400 });
   });
   const idParam = z.object({ id: z.coerce.number().int().positive() });
   const getItem = (params: unknown): Item => {
@@ -241,6 +247,22 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
     await leaveInbox(item, 'Arquivados');
     const out = store.updateItem(item.id, { status: 'archived', draft_id: null });
     bus.emit('change', { type: 'item', id: item.id, status: 'archived' });
+    return view(out);
+  });
+
+  /** Já respondeu no Gmail (ou fora do app): não envia o rascunho; vai para Respondidos e sai da inbox. */
+  app.post('/api/items/:id/mark-replied', async (req) => {
+    const item = getItem(req.params);
+    if (item.status !== 'pending' && item.status !== 'error') {
+      throw Object.assign(new Error('Só dá para marcar itens pendentes ou com erro.'), { statusCode: 409 });
+    }
+    if (item.draft_id) {
+      try { await gmail.deleteDraft(item.draft_id); } catch (e) { if (!(e instanceof GmailError && e.status === 404)) throw e; }
+    }
+    await leaveInbox(item, 'Respondidos');
+    const note = [item.internal_notes, 'Marcado como respondido sem enviar pelo assistente (já tratado fora).'].filter(Boolean).join(' ');
+    const out = store.updateItem(item.id, { status: 'sent', draft_id: null, internal_notes: note });
+    bus.emit('change', { type: 'item', id: item.id, status: 'sent' });
     return view(out);
   });
 

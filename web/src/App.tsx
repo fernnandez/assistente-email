@@ -196,9 +196,9 @@ export function App() {
         <main className="cols">
           <aside className="list">
             <div className="tabs">
-              <button className={filter === 'unread' ? 'tab on' : 'tab'} onClick={() => { setFilter('unread'); setSelectedId(null); }}>Não lidos ({unreadCount})</button>
-              <button className={filter === 'sent' ? 'tab on' : 'tab'} onClick={() => { setFilter('sent'); setSelectedId(null); }}>Respondidos ({sentCount})</button>
-              <button className={filter === 'archived' ? 'tab on' : 'tab'} onClick={() => { setFilter('archived'); setSelectedId(null); }}>Arquivados ({archivedCount})</button>
+              <button className={filter === 'unread' ? 'tab on' : 'tab'} onClick={() => { setFilter('unread'); setSelectedId(null); setItems([]); }}>Não lidos ({unreadCount})</button>
+              <button className={filter === 'sent' ? 'tab on' : 'tab'} onClick={() => { setFilter('sent'); setSelectedId(null); setItems([]); }}>Respondidos ({sentCount})</button>
+              <button className={filter === 'archived' ? 'tab on' : 'tab'} onClick={() => { setFilter('archived'); setSelectedId(null); setItems([]); }}>Arquivados ({archivedCount})</button>
             </div>
             <div className="sort-row">
               <button type="button" className={sort === 'newest' ? 'sort-btn on' : 'sort-btn'} onClick={() => setSort('newest')}>Mais novos</button>
@@ -377,12 +377,30 @@ function Detail({ item, onChange }: { item: Item; onChange: () => Promise<void> 
         <div className="actions">
           <button className="btn primary" disabled={!!busy || !text.trim()} onClick={() => void run('send', () => api.send(item.id, text), 'Enviar esta resposta agora para ' + item.from_email + '?')}>{busy === 'send' ? 'Enviando…' : 'Enviar'}</button>
           <button className="btn" disabled={!!busy || !dirty} onClick={() => void run('save', () => api.save(item.id, text))}>{busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}</button>
+          <button
+            className="btn"
+            disabled={!!busy}
+            onClick={() => void run(
+              'markReplied',
+              () => api.markReplied(item.id),
+              'Já respondeu (no Gmail ou fora do app)?\n\n• Não envia este rascunho\n• Vai para Respondidos\n• Sai da Caixa de entrada + marcador "Respondidos"',
+            )}
+          >{busy === 'markReplied' ? 'Marcando…' : 'Já respondi'}</button>
           <button className="btn danger" disabled={!!busy} onClick={() => void run('discard', () => api.discard(item.id), 'Descartar este rascunho? O e-mail original continua na sua caixa.')}>Descartar</button>
           <button className="btn" disabled={!!busy} onClick={() => void run('archive', () => api.archive(item.id), 'Arquivar?\n\n• Sai da Caixa de entrada\n• Marcador "Arquivados"\n• Some da fila\n\n(Não lidos ficam na inbox; Enviar usa o marcador "Respondidos".)')}>{busy === 'archive' ? 'Arquivando…' : 'Arquivar'}</button>
         </div>
       )}
       {item.status === 'error' && (
         <div className="actions">
+          <button
+            className="btn"
+            disabled={!!busy}
+            onClick={() => void run(
+              'markReplied',
+              () => api.markReplied(item.id),
+              'Já respondeu fora do app? Vai para Respondidos e sai da Caixa de entrada (não envia rascunho).',
+            )}
+          >{busy === 'markReplied' ? 'Marcando…' : 'Já respondi'}</button>
           <button className="btn" disabled={!!busy} onClick={() => void run('archive', () => api.archive(item.id), 'Arquivar? Sai da Caixa de entrada e marca "Arquivados".')}>{busy === 'archive' ? 'Arquivando…' : 'Arquivar'}</button>
         </div>
       )}

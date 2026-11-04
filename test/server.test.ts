@@ -89,6 +89,18 @@ describe('API da fila', () => {
     expect(s.store.counts().archived).toBe(1);
   });
 
+  it('já respondi: não envia rascunho, marca Respondidos e sai da inbox', async () => {
+    const r = await s.app.inject({ method: 'POST', url: `/api/items/${id}/mark-replied`, headers: H, payload: {} });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ status: 'sent', draft_id: null });
+    expect(r.json().internal_notes).toMatch(/Marcado como respondido/);
+    expect(s.g.calls.map((c) => c.fn)).toEqual(['deleteDraft', 'archiveMessage']);
+    expect(s.g.calls.find((c) => c.fn === 'archiveMessage')!.args[1]).toMatchObject({ labelName: 'Respondidos' });
+    expect((await s.app.inject({ method: 'GET', url: '/api/items?status=pending', headers: H })).json()).toHaveLength(0);
+    expect(s.store.counts().sent).toBe(1);
+    expect((await s.app.inject({ method: 'POST', url: `/api/items/${id}/mark-replied`, headers: H, payload: {} })).statusCode).toBe(409);
+  });
+
   it('enviar: depois do envio também tira da inbox no Gmail', async () => {
     const r = await s.app.inject({ method: 'POST', url: `/api/items/${id}/send`, headers: H, payload: { reply_body: 'Resposta ok.' } });
     expect(r.statusCode).toBe(200);

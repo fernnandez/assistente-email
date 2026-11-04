@@ -39,7 +39,7 @@ already_up() {
 
 if already_up; then
   open "$URL"
-  notify "Já estava aberto — navegador atualizado."
+  notify "Já estava aberto — navegador atualizado. Se você atualizou o código (git pull), use Encerrar Assistente e abra de novo."
   close_terminal
   exit 0
 fi

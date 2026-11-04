@@ -35,9 +35,10 @@ Regras da empresa que o modelo usa para rascunhar.
 2. Deixe a **aba do navegador** aberta; use **Ativar avisos** se quiser notificação de e-mail novo.
 3. Na **Fila**, três abas claras (e o mesmo no Gmail):
    - **Não lidos** — ainda na fila / Caixa de entrada
-   - **Respondidos** — você clicou em **Enviar** (sai da inbox + marcador Respondidos)
+   - **Respondidos** — **Enviar** pelo app, ou **Já respondi** se você já respondeu no Gmail (sai da inbox + marcador Respondidos)
    - **Arquivados** — você clicou em **Arquivar** (sai da inbox + marcador Arquivados)
    - **Descartar** só tira do app (e-mail pode continuar na inbox)
+   - Se o e-mail já foi tratado fora do assistente e ainda aparece em Não lidos: use **Já respondi**
    - “Todos os e-mails” no Gmail sempre mostra o histórico — o que esvazia é a **Caixa de entrada**.
 4. **Sincronizar anteriores** busca não lidos dos últimos 7 dias (até 30) que chegaram antes do app estar ligado — gera rascunhos (usa o modelo).
 5. Ao terminar o dia (opcional): `Encerrar Assistente.command`.

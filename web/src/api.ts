@@ -89,6 +89,7 @@ export const api = {
   send: (id: number, reply_body: string) => call<Item>(`/api/items/${id}/send`, 'POST', { reply_body }),
   discard: (id: number) => call<Item>(`/api/items/${id}/discard`, 'POST', {}),
   archive: (id: number) => call<Item>(`/api/items/${id}/archive`, 'POST', {}),
+  markReplied: (id: number) => call<Item>(`/api/items/${id}/mark-replied`, 'POST', {}),
   regenerate: (id: number, instruction: string) => call<Item>(`/api/items/${id}/regenerate`, 'POST', { instruction }),
   poll: () => call<{ ok: boolean }>('/api/poll', 'POST', {}),
   sync: () => call<SyncResult>('/api/sync', 'POST', {}),
