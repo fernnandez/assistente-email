@@ -26,6 +26,12 @@ const storedSchema = z.object({
     domain: z.string().optional(),
     token: z.string().optional(),
   }).optional(),
+  drive: z.object({
+    enabled: z.boolean().optional(),
+    rootFolderId: z.string().optional(),
+    matchMode: z.enum(['email_domain', 'company_name', 'pipedrive_org']).optional(),
+    domainMap: z.string().optional(),
+  }).optional(),
 });
 
 export type StoredSettings = z.infer<typeof storedSchema>;
@@ -51,11 +57,19 @@ export const settingsPatchSchema = z.object({
     domain: z.string().max(100).optional(),
     token: z.string().max(300).optional(),
   }).optional(),
+  drive: z.object({
+    enabled: z.boolean().optional(),
+    rootFolderId: z.string().max(500).optional(),
+    matchMode: z.enum(['email_domain', 'company_name', 'pipedrive_org']).optional(),
+    domainMap: z.string().max(10_000).optional(),
+  }).optional(),
 });
 
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 
 /** Config efetiva: o que foi salvo na UI sobrescreve o .env; campo vazio na UI cai no .env. */
+export type DriveMatchMode = 'email_domain' | 'company_name' | 'pipedrive_org';
+
 export interface RuntimeSecrets {
   company: {
     name: string;
@@ -67,6 +81,12 @@ export interface RuntimeSecrets {
   google: { clientId: string; clientSecret: string };
   llm: { baseUrl: string; apiKey: string; model: string };
   pipedrive: { domain: string; token: string };
+  drive: {
+    enabled: boolean;
+    rootFolderId: string;
+    matchMode: DriveMatchMode;
+    domainMap: string;
+  };
 }
 
 export interface PublicSettings {
@@ -80,6 +100,12 @@ export interface PublicSettings {
   google: { clientId: string; clientSecretConfigured: boolean };
   llm: { baseUrl: string; apiKeyConfigured: boolean; model: string };
   pipedrive: { domain: string; tokenConfigured: boolean };
+  drive: {
+    enabled: boolean;
+    rootFolderId: string;
+    matchMode: DriveMatchMode;
+    domainMap: string;
+  };
 }
 
 export interface SetupStatus {
@@ -87,6 +113,7 @@ export interface SetupStatus {
   google: boolean;
   llm: boolean;
   pipedrive: boolean;
+  drive: boolean;
   policies: boolean;
   gmail: boolean;
   ready: boolean;
@@ -140,6 +167,12 @@ export function runtime(store: Store | null = bound): RuntimeSecrets {
       domain: pick(s.pipedrive?.domain, config.pipedrive.domain),
       token: pick(s.pipedrive?.token, config.pipedrive.token),
     },
+    drive: {
+      enabled: s.drive?.enabled === true,
+      rootFolderId: (s.drive?.rootFolderId ?? '').trim(),
+      matchMode: s.drive?.matchMode ?? 'pipedrive_org',
+      domainMap: (s.drive?.domainMap ?? '').trim(),
+    },
   };
 }
 
@@ -158,6 +191,12 @@ export function publicSettings(store: Store): PublicSettings {
     google: { clientId: r.google.clientId, clientSecretConfigured: !!r.google.clientSecret },
     llm: { baseUrl: r.llm.baseUrl, apiKeyConfigured: !!r.llm.apiKey, model: r.llm.model },
     pipedrive: { domain: r.pipedrive.domain, tokenConfigured: !!r.pipedrive.token },
+    drive: {
+      enabled: r.drive.enabled,
+      rootFolderId: r.drive.rootFolderId,
+      matchMode: r.drive.matchMode,
+      domainMap: r.drive.domainMap,
+    },
   };
 }
 
@@ -169,6 +208,7 @@ export function saveSettings(store: Store, patch: SettingsPatch): PublicSettings
     google: { ...cur.google },
     llm: { ...cur.llm },
     pipedrive: { ...cur.pipedrive },
+    drive: { ...cur.drive },
   };
 
   if (patch.company) {
@@ -197,6 +237,12 @@ export function saveSettings(store: Store, patch: SettingsPatch): PublicSettings
     if (patch.pipedrive.domain !== undefined) next.pipedrive!.domain = patch.pipedrive.domain.trim();
     if (patch.pipedrive.token !== undefined) next.pipedrive!.token = patch.pipedrive.token.trim();
   }
+  if (patch.drive) {
+    if (patch.drive.enabled !== undefined) next.drive!.enabled = patch.drive.enabled;
+    if (patch.drive.rootFolderId !== undefined) next.drive!.rootFolderId = patch.drive.rootFolderId.trim();
+    if (patch.drive.matchMode !== undefined) next.drive!.matchMode = patch.drive.matchMode;
+    if (patch.drive.domainMap !== undefined) next.drive!.domainMap = patch.drive.domainMap.trim();
+  }
 
   store.setState(SETTINGS_KEY, JSON.stringify(next));
   return publicSettings(store);
@@ -215,6 +261,9 @@ export function configProblems(store: Store | null = bound): string[] {
   if (!r.pipedrive.domain || !r.pipedrive.token) {
     p.push('Pipedrive: domínio e token (opcional — sem isso o histórico do cliente não é usado)');
   }
+  if (r.drive.enabled && !r.drive.rootFolderId) {
+    p.push('Google Drive: pasta-raiz dos clientes (cole o ID ou o link da pasta em Configuração)');
+  }
   return p;
 }
 
@@ -228,10 +277,11 @@ export function setupStatus(args: {
   const llm = !!r.llm.apiKey;
   const company = !!(r.company.name && (r.company.signature || r.company.signatureHtml));
   const pipedrive = !!(r.pipedrive.domain && r.pipedrive.token);
+  const drive = r.drive.enabled && !!r.drive.rootFolderId;
   const policies = args.policiesCount > 0;
   const gmail = args.gmailConnected;
   return {
-    company, google, llm, pipedrive, policies, gmail,
+    company, google, llm, pipedrive, drive, policies, gmail,
     ready: google && llm && gmail,
   };
 }

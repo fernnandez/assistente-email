@@ -1,6 +1,6 @@
 import { marked } from 'marked';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, type Item, type PublicSettings, type Risk, type SettingsPatch, type StatusInfo } from './api';
+import { api, type DriveMatchMode, type Item, type PublicSettings, type Risk, type SettingsPatch, type StatusInfo } from './api';
 
 const RISK_LABEL: Record<Risk, string> = { low: 'Baixo', medium: 'Médio', high: 'Alto' };
 const STATUS_LABEL: Record<string, string> = {
@@ -318,6 +318,7 @@ function SetupChecklist({ setup, onOpenDocs }: { setup: StatusInfo['setup']; onO
         <Step ok={setup.gmail}>Conectar Gmail</Step>
         <Step ok={setup.policies}>Políticas da empresa <button type="button" className="btn link" onClick={onOpenDocs}>abrir Documentos</button></Step>
         <Step ok={setup.pipedrive}>Pipedrive <span className="optional">(opcional)</span></Step>
+        <Step ok={setup.drive}>Google Drive <span className="optional">(opcional)</span></Step>
       </ol>
       <p className="hint">Guia em Documentos → <code>COMEÇAR.md</code>. No Mac: <code>Abrir Assistente.command</code> sobe em segundo plano (sem Terminal à vista); <code>Encerrar Assistente.command</code> para parar.</p>
     </div>
@@ -424,6 +425,10 @@ function SettingsPage({
   const [domain, setDomain] = useState('');
   const [token, setToken] = useState('');
   const [tokenTouched, setTokenTouched] = useState(false);
+  const [driveEnabled, setDriveEnabled] = useState(false);
+  const [driveRoot, setDriveRoot] = useState('');
+  const [driveMode, setDriveMode] = useState<DriveMatchMode>('pipedrive_org');
+  const [driveMap, setDriveMap] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -440,6 +445,10 @@ function SettingsPage({
       setBaseUrl(cur.llm.baseUrl || VERCEL_GATEWAY);
       setModel(cur.llm.model || 'openai/gpt-4.1');
       setDomain(cur.pipedrive.domain);
+      setDriveEnabled(cur.drive?.enabled ?? false);
+      setDriveRoot(cur.drive?.rootFolderId ?? '');
+      setDriveMode(cur.drive?.matchMode ?? 'pipedrive_org');
+      setDriveMap(cur.drive?.domainMap ?? '');
     }).catch((e) => setErr(e instanceof Error ? e.message : String(e)));
   }, []);
 
@@ -451,6 +460,12 @@ function SettingsPage({
         google: { clientId },
         llm: { baseUrl, model },
         pipedrive: { domain },
+        drive: {
+          enabled: driveEnabled,
+          rootFolderId: driveRoot,
+          matchMode: driveMode,
+          domainMap: driveMap,
+        },
       };
       if (secretTouched) patch.google!.clientSecret = clientSecret;
       if (keyTouched) patch.llm!.apiKey = apiKey;
@@ -550,6 +565,49 @@ function SettingsPage({
           />
         </label>
         <p className="hint">{s?.pipedrive.tokenConfigured ? 'Token já configurado.' : 'Sem Pipedrive o histórico do cliente não entra no rascunho.'}</p>
+      </section>
+
+      <section className="form-block">
+        <h3>5. Google Drive <span className="optional">(opcional)</span></h3>
+        <p className="hint">
+          Quando o e-mail falar de contrato, proposta, NF etc., o assistente localiza a pasta do cliente
+          sob a pasta-raiz e pode ler trechos (Docs, PDF com texto, planilhas). Ative a <strong>Drive API</strong> no mesmo
+          projeto GCP e <strong>Desconecte → Conecte Gmail</strong> de novo para autorizar a leitura.
+        </p>
+        <label className="check">
+          <input type="checkbox" checked={driveEnabled} onChange={(e) => setDriveEnabled(e.target.checked)} />
+          Consultar documentos no Drive
+        </label>
+        <label>Pasta-raiz dos clientes (ID ou link)
+          <input
+            value={driveRoot}
+            onChange={(e) => setDriveRoot(e.target.value)}
+            placeholder="https://drive.google.com/drive/folders/…"
+            disabled={!driveEnabled}
+            autoComplete="off"
+          />
+        </label>
+        <label>Como achar a pasta do cliente
+          <select value={driveMode} onChange={(e) => setDriveMode(e.target.value as DriveMatchMode)} disabled={!driveEnabled}>
+            <option value="pipedrive_org">Empresa do Pipedrive + domínio do e-mail</option>
+            <option value="company_name">Nome da empresa / contato</option>
+            <option value="email_domain">Domínio do e-mail (ex.: acme.com)</option>
+          </select>
+        </label>
+        <label>Mapa fixo domínio → pasta (opcional)
+          <textarea
+            rows={4}
+            value={driveMap}
+            onChange={(e) => setDriveMap(e.target.value)}
+            placeholder={'acme.com=ID_DA_PASTA\noutra.com=https://drive.google.com/drive/folders/…'}
+            disabled={!driveEnabled}
+          />
+        </label>
+        <p className="hint">
+          {driveEnabled
+            ? (driveRoot.trim() ? 'Drive ativo — pastas filhas da raiz serão buscadas nos e-mails sobre documentos.' : 'Marcado, mas falta a pasta-raiz.')
+            : 'Desligado: o rascunho não consulta o Drive.'}
+        </p>
       </section>
 
       {err && <div className="banner error">{err}</div>}

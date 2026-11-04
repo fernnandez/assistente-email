@@ -9,6 +9,7 @@ export const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly', // ler e-mails recebidos
   'https://www.googleapis.com/auth/gmail.compose', // criar/editar rascunhos e enviar o rascunho aprovado
   'https://www.googleapis.com/auth/gmail.modify', // arquivar (remover da inbox) sem apagar
+  'https://www.googleapis.com/auth/drive.readonly', // localizar e ler docs do cliente no Drive
 ];
 
 // ───────── funções puras (testáveis) ─────────
@@ -188,6 +189,8 @@ export class GmailClient {
   needsReauth() { return this.store.getState('google_needs_reauth') === '1'; }
   isConnected() { return this.hasToken() && !this.needsReauth(); }
   email() { return this.store.getState('google_email'); }
+  /** Token atual (Gmail + Drive compartilham o mesmo OAuth). */
+  getAccessToken() { return this.accessToken(); }
 
   // OAuth (PKCE, redirecionamento para este servidor local)
   startAuth(port = config.port): { url: string } {

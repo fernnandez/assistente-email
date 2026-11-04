@@ -19,6 +19,7 @@ O app já abre nessa aba se faltar algo. Preencha e clique em **Salvar configura
 2. **Modelo (LLM)** — botão *Vercel AI Gateway* + cole a chave da API.
 3. **Google** — Client ID e Client Secret (passo a passo em `CONFIGURAR-GOOGLE.md` em Documentos). **Salve**, depois **Conectar Gmail** e autorize a conta de trabalho.
 4. **Pipedrive** (opcional) — domínio (antes de `.pipedrive.com`) e token de API.
+5. **Google Drive** (opcional) — ative a Drive API no mesmo projeto GCP, reconecte o Gmail, marque *Consultar documentos*, cole a pasta-raiz dos clientes. Detalhes em `CONFIGURAR-GOOGLE.md`.
 
 Checklist na própria tela mostra o que já está ok.
 

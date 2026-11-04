@@ -17,8 +17,10 @@ export interface Item {
 }
 export interface SetupStatus {
   company: boolean; google: boolean; llm: boolean; pipedrive: boolean;
-  policies: boolean; gmail: boolean; ready: boolean;
+  drive: boolean; policies: boolean; gmail: boolean; ready: boolean;
 }
+
+export type DriveMatchMode = 'email_domain' | 'company_name' | 'pipedrive_org';
 
 export interface StatusInfo {
   gmail: { connected: boolean; needsReauth: boolean; email: string | null };
@@ -40,6 +42,12 @@ export interface PublicSettings {
   google: { clientId: string; clientSecretConfigured: boolean };
   llm: { baseUrl: string; apiKeyConfigured: boolean; model: string };
   pipedrive: { domain: string; tokenConfigured: boolean };
+  drive: {
+    enabled: boolean;
+    rootFolderId: string;
+    matchMode: DriveMatchMode;
+    domainMap: string;
+  };
 }
 
 export interface SettingsPatch {
@@ -53,6 +61,12 @@ export interface SettingsPatch {
   google?: { clientId?: string; clientSecret?: string };
   llm?: { baseUrl?: string; apiKey?: string; model?: string };
   pipedrive?: { domain?: string; token?: string };
+  drive?: {
+    enabled?: boolean;
+    rootFolderId?: string;
+    matchMode?: DriveMatchMode;
+    domainMap?: string;
+  };
 }
 
 export interface DocFile { name: string; content: string }

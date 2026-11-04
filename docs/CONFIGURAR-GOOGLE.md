@@ -15,8 +15,10 @@ Tempo: ~15 minutos. Custo: zero (a Gmail API não exige faturamento).
 
 > Usar um projeto novo é mais seguro que reaproveitar um existente: cada projeto tem uma única tela de consentimento, e mudá-la para "Interno" pode afetar outros apps.
 
-## 3. Ativar a Gmail API
-*APIs e serviços → Biblioteca → Gmail API → Ativar* (com o projeto novo selecionado).
+## 3. Ativar as APIs
+Com o projeto selecionado, em *APIs e serviços → Biblioteca*:
+1. **Gmail API** → *Ativar*
+2. **Google Drive API** → *Ativar* (para consultar pastas/docs do cliente nos e-mails sobre documentos)
 
 ## 4. Tela de consentimento como **Interna**
 1. *APIs e serviços → Tela de permissão OAuth* (ou *Google Auth Platform*) → *Começar*.
@@ -26,8 +28,9 @@ Tempo: ~15 minutos. Custo: zero (a Gmail API não exige faturamento).
    - `https://www.googleapis.com/auth/gmail.readonly`
    - `https://www.googleapis.com/auth/gmail.compose`
    - `https://www.googleapis.com/auth/gmail.modify` (arquivar / tirar da inbox)
+   - `https://www.googleapis.com/auth/drive.readonly` (localizar e ler docs do cliente)
 
-Se o app já estava conectado sem o escopo `modify`, em **Configuração** use **Desconectar** e **Conectar Gmail** de novo para autorizar.
+Se o app já estava conectado sem algum desses escopos, em **Configuração** use **Desconectar** e **Conectar Gmail** de novo para autorizar.
 
 ## 5. Criar o cliente OAuth
 *Clientes → Criar cliente* → tipo **App para computador (Desktop app)** → nome `assistente-desktop` → *Criar*.
@@ -41,7 +44,14 @@ https://admin.google.com → *Segurança → Controle de acesso e de dados → C
 1. `npm start` e abra http://127.0.0.1:3210.
 2. Vá em **Configuração → Google**.
 3. Cole o **ID do cliente** e a **chave secreta do cliente** → *Salvar configuração*.
-4. Clique em **Conectar Gmail**. A autorização é feita com a conta dela, no navegador.
+4. Clique em **Conectar Gmail**. A autorização é feita com a conta dela, no navegador (Gmail + Drive somente leitura).
+
+### Google Drive (opcional, na mesma tela)
+1. Em **Configuração → Google Drive**, marque *Consultar documentos no Drive*.
+2. Cole o **link ou ID** da pasta-raiz onde ficam as pastas dos clientes (ex.: `Clientes/`).
+3. Escolha como achar a pasta (domínio do e-mail, nome da empresa, Pipedrive).
+4. Se quiser, preencha o mapa `dominio.com=ID_DA_PASTA` para clientes com nome de pasta irregular.
+5. *Salvar configuração*. Nos e-mails que falarem de contrato/proposta/NF etc., o rascunho usa essa pasta.
 
 (Opcional: as mesmas variáveis `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` no `.env` ainda funcionam como reserva se a tela estiver vazia.)
 

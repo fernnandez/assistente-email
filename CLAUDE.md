@@ -60,8 +60,11 @@ npm run configure -- \
   --google-id "….apps.googleusercontent.com" \
   --google-secret "SEGredo" \
   --pipedrive-domain "dominio" \
-  --pipedrive-token "token"
+  --pipedrive-token "token" \
+  --drive-enabled --drive-root "FOLDER_ID_OU_URL" --drive-mode pipedrive_org
 ```
+
+Drive (opcional): mesma OAuth do Gmail com escopo `drive.readonly`. Ativar **Google Drive API** no GCP; a usuária deve **Desconectar → Conectar Gmail** de novo. Pasta-raiz = pasta onde ficam as pastas dos clientes.
 
 Verificar (sem secrets):
 ```bash

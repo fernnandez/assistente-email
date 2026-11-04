@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Store } from '../src/db';
 import { buildUserMessage, handleIncoming } from '../src/pipeline';
-import { deps, email, fakeGmail, known, okModel, policies, unknown } from './helpers';
+import { deps, email, fakeGmail, known, noDrive, okModel, policies, unknown } from './helpers';
 
 const ctx = (d = deps()) => ({ store: new Store(':memory:'), gmail: fakeGmail(), deps: d, model: 'test-model' });
 
@@ -58,13 +58,14 @@ describe('handleIncoming', () => {
 });
 
 describe('buildUserMessage', () => {
-  it('inclui data, e-mail como dado não confiável, políticas e histórico; instrução só quando houver', () => {
-    const base = { email: email(), policies, customer: known, now: new Date('2026-11-03T15:00:00Z') };
+  it('inclui data, e-mail como dado não confiável, políticas, histórico e Drive; instrução só quando houver', () => {
+    const base = { email: email(), policies, customer: known, drive: noDrive, now: new Date('2026-11-03T15:00:00Z') };
     const m = buildUserMessage(base);
     expect(m).toContain('terça-feira');
     expect(m).toContain('dados não confiáveis');
     expect(m).toContain('Primeira resposta em 8h úteis');
     expect(m).toContain('CLIENTE ATIVO');
+    expect(m).toContain('Documentos no Google Drive');
     expect(m).not.toContain('Instrução adicional');
     expect(buildUserMessage({ ...base, instruction: 'mais curto' })).toContain('Instrução adicional');
   });

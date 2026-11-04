@@ -1,5 +1,6 @@
 import { config } from './config';
 import { Store } from './db';
+import { bindDriveAuth } from './drive';
 import { GmailClient } from './gmail';
 import { startPoller } from './poller';
 import { buildServer } from './server';
@@ -8,6 +9,7 @@ import { bindSettings, configProblems } from './settings';
 const store = new Store();
 bindSettings(store);
 const gmail = new GmailClient(store);
+bindDriveAuth(() => gmail.getAccessToken());
 const poller = startPoller({ store, gmail });
 const app = buildServer({ store, gmail, poller });
 

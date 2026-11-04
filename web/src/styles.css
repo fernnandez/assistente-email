@@ -373,7 +373,7 @@ h3 {
 }
 .orig.crm { font-size: 13px; margin-top: 6px; }
 
-textarea, .form-block input, .regen input {
+textarea, .form-block input, .form-block select, .regen input {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -383,7 +383,17 @@ textarea, .form-block input, .regen input {
   background: #fff;
   resize: vertical;
 }
-textarea:focus, .form-block input:focus, .regen input:focus {
+.form-block label.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+.form-block label.check input {
+  width: auto;
+  margin: 0;
+}
+textarea:focus, .form-block input:focus, .form-block select:focus, .regen input:focus {
   outline: none;
   border-color: color-mix(in srgb, var(--brand) 45%, transparent);
   box-shadow: 0 0 0 3px var(--brand-soft);
