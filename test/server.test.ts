@@ -66,7 +66,7 @@ describe('API da fila', () => {
     const r = await s.app.inject({ method: 'POST', url: `/api/items/${id}/send`, headers: H, payload: { reply_body: 'Texto editado por mim.' } });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ status: 'sent', reply_body: 'Texto editado por mim.' });
-    expect(s.g.calls.map((c) => c.fn)).toEqual(['updateDraft', 'sendDraft']);
+    expect(s.g.calls.map((c) => c.fn)).toEqual(['updateDraft', 'sendDraft', 'archiveMessage']);
     expect((await s.app.inject({ method: 'POST', url: `/api/items/${id}/send`, headers: H, payload: {} })).statusCode).toBe(409);
   });
 
@@ -82,9 +82,19 @@ describe('API da fila', () => {
     expect(r.statusCode).toBe(200);
     expect(r.json().status).toBe('archived');
     expect(s.g.calls.map((c) => c.fn)).toEqual(['deleteDraft', 'archiveMessage']);
-    expect(s.g.calls.find((c) => c.fn === 'archiveMessage')!.args[0]).toBe('m1');
+    const arch = s.g.calls.find((c) => c.fn === 'archiveMessage')!;
+    expect(arch.args[0]).toBe('m1');
+    expect(arch.args[1]).toMatchObject({ threadId: 't1', labelName: 'Arquivados' });
     expect((await s.app.inject({ method: 'GET', url: '/api/items?status=pending', headers: H })).json()).toHaveLength(0);
     expect(s.store.counts().archived).toBe(1);
+  });
+
+  it('enviar: depois do envio também tira da inbox no Gmail', async () => {
+    const r = await s.app.inject({ method: 'POST', url: `/api/items/${id}/send`, headers: H, payload: { reply_body: 'Resposta ok.' } });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().status).toBe('sent');
+    expect(s.g.calls.map((c) => c.fn)).toEqual(['updateDraft', 'sendDraft', 'archiveMessage']);
+    expect(s.g.calls.find((c) => c.fn === 'archiveMessage')!.args[1]).toMatchObject({ labelName: 'Respondidos' });
   });
 
   it('refazer: gera de novo com a instrução e atualiza o rascunho', async () => {

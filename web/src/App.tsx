@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { api, type Item, type PublicSettings, type Risk, type SettingsPatch, type StatusInfo } from './api';
 
 const RISK_LABEL: Record<Risk, string> = { low: 'Baixo', medium: 'Médio', high: 'Alto' };
-const STATUS_LABEL: Record<string, string> = { pending: 'Aguardando', sent: 'Enviado', discarded: 'Descartado', archived: 'Arquivado', error: 'Erro', ignored: 'Ignorado' };
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'Não lido', sent: 'Respondido', discarded: 'Descartado', archived: 'Arquivado', error: 'Erro', ignored: 'Ignorado',
+};
+type InboxFilter = 'unread' | 'sent' | 'archived';
 
 type Page = 'fila' | 'config' | 'docs';
 
@@ -20,13 +23,24 @@ export function App() {
   const [page, setPage] = useState<Page>('fila');
   const [status, setStatus] = useState<StatusInfo | null>(null);
   const [items, setItems] = useState<Item[]>([]);
-  const [filter, setFilter] = useState<'pending' | 'all'>('pending');
+  const [filter, setFilter] = useState<InboxFilter>('unread');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>('Notification' in window ? Notification.permission : 'unsupported');
   const [welcomed, setWelcomed] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [menuOpen]);
 
   const refresh = useCallback(async () => {
     try {
@@ -59,56 +73,99 @@ export function App() {
     return () => es.close();
   }, [refresh]);
 
-  const pendingCount = status?.counts.pending ?? 0;
-  useEffect(() => { document.title = pendingCount ? `(${pendingCount}) Assistente de e-mail` : 'Assistente de e-mail'; }, [pendingCount]);
+  const unreadCount = (status?.counts.pending ?? 0) + (status?.counts.error ?? 0);
+  const sentCount = status?.counts.sent ?? 0;
+  const archivedCount = status?.counts.archived ?? 0;
+  useEffect(() => { document.title = unreadCount ? `(${unreadCount}) Assistente de e-mail` : 'Assistente de e-mail'; }, [unreadCount]);
 
   const selected = useMemo(() => items.find((i) => i.id === selectedId) ?? null, [items, selectedId]);
   useEffect(() => { if (selectedId === null && items.length) setSelectedId(items[0].id); }, [items, selectedId]);
+
+  function runSync() {
+    const ok = window.confirm(
+      'Buscar e-mails não lidos da inbox dos últimos 7 dias (até 30) e gerar rascunhos?\n\nIsso usa o modelo de linguagem (custa por e-mail). Itens já processados são ignorados.',
+    );
+    if (!ok) return;
+    setMenuOpen(false);
+    setSyncing(true);
+    setSyncMsg(null);
+    setError(null);
+    void api.sync()
+      .then((r) => {
+        setSyncMsg(`Sync: ${r.processed} processado(s), ${r.skipped} ignorado(s)${r.errors.length ? `, ${r.errors.length} erro(s)` : ''}.`);
+        return refresh();
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setSyncing(false));
+  }
 
   return (
     <div className="app">
       <header className="top">
         <div className="brand-nav">
-          <h1>Assistente de e-mail</h1>
-          <nav className="nav">
-            <button className={page === 'fila' ? 'nav-btn on' : 'nav-btn'} onClick={() => setPage('fila')}>Fila</button>
-            <button className={page === 'config' ? 'nav-btn on' : 'nav-btn'} onClick={() => setPage('config')}>Configuração</button>
-            <button className={page === 'docs' ? 'nav-btn on' : 'nav-btn'} onClick={() => setPage('docs')}>Documentos</button>
-          </nav>
+          <button type="button" className="btn link" style={{ padding: 0 }} onClick={() => setPage('fila')} title="Voltar à fila">
+            <h1>Assistente</h1>
+          </button>
+          {page === 'fila' && <span className="brand-sub">{unreadCount ? `${unreadCount} não lidos` : 'inbox em dia'}</span>}
+          {page === 'config' && <span className="brand-sub">Configuração</span>}
+          {page === 'docs' && <span className="brand-sub">Documentos</span>}
         </div>
-        {page === 'fila' && (
-          <div className="chips">
-            {status?.gmail.connected ? (
-              <span className="chip ok" title="Caixa conectada">● {status.gmail.email ?? 'Gmail conectado'}</span>
-            ) : (
-              <a className="btn primary" href="/auth/google">{status?.gmail.needsReauth ? 'Reconectar Gmail' : 'Conectar Gmail'}</a>
-            )}
-            <span className="chip">Última verificação: {ago(status?.lastPollAt ?? null)}</span>
-            <button className="btn" onClick={() => void api.poll().then(refresh)} disabled={!status?.gmail.connected || syncing}>Verificar agora</button>
+
+        <div className="header-actions">
+          {status?.gmail.connected ? (
+            <span className="status-pill ok" title="Caixa conectada">
+              <span className="pulse" />
+              {status.gmail.email ?? 'Gmail'}
+            </span>
+          ) : (
+            <a className="btn primary" href="/auth/google">{status?.gmail.needsReauth ? 'Reconectar Gmail' : 'Conectar Gmail'}</a>
+          )}
+
+          {page === 'fila' && (
             <button
-              className="btn"
+              type="button"
+              className="btn ghost"
+              onClick={() => void api.poll().then(refresh)}
               disabled={!status?.gmail.connected || syncing}
-              onClick={() => {
-                const ok = window.confirm(
-                  'Buscar e-mails não lidos da inbox dos últimos 7 dias (até 30) e gerar rascunhos?\n\nIsso usa o modelo de linguagem (custa por e-mail). Itens já processados são ignorados.',
-                );
-                if (!ok) return;
-                setSyncing(true);
-                setSyncMsg(null);
-                setError(null);
-                void api.sync()
-                  .then((r) => {
-                    setSyncMsg(`Sync: ${r.processed} processado(s), ${r.skipped} ignorado(s)${r.errors.length ? `, ${r.errors.length} erro(s)` : ''}.`);
-                    return refresh();
-                  })
-                  .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-                  .finally(() => setSyncing(false));
-              }}
-            >{syncing ? 'Sincronizando…' : 'Sincronizar anteriores'}</button>
-            {perm === 'default' && <button className="btn" onClick={() => void Notification.requestPermission().then(setPerm)}>Ativar avisos</button>}
-            {status?.gmail.connected && <button className="btn link" onClick={() => void api.disconnect().then(refresh)}>Desconectar</button>}
+              title={`Última verificação: ${ago(status?.lastPollAt ?? null)}`}
+            >
+              Verificar
+            </button>
+          )}
+
+          {perm === 'default' && page === 'fila' && (
+            <button type="button" className="btn ghost" onClick={() => void Notification.requestPermission().then(setPerm)}>Avisos</button>
+          )}
+
+          <div className="menu-wrap" ref={menuRef}>
+            <button
+              type="button"
+              className={`icon-btn ${menuOpen || page !== 'fila' ? 'on' : ''}`}
+              aria-label="Menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="menu-pop" role="menu">
+                <button type="button" onClick={() => { setPage('fila'); setMenuOpen(false); }}>Fila</button>
+                <button type="button" onClick={() => { setPage('config'); setMenuOpen(false); }}>Configuração</button>
+                <button type="button" onClick={() => { setPage('docs'); setMenuOpen(false); }}>Documentos / políticas</button>
+                <div className="sep" />
+                <button type="button" disabled={!status?.gmail.connected || syncing} onClick={runSync}>
+                  {syncing ? 'Sincronizando…' : 'Sincronizar anteriores'}
+                </button>
+                {status?.gmail.connected && (
+                  <button type="button" onClick={() => { setMenuOpen(false); void api.disconnect().then(refresh); }}>Desconectar Gmail</button>
+                )}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </header>
 
       {error && <div className="banner error">{error}</div>}
@@ -117,11 +174,11 @@ export function App() {
       {status && status.problems.length > 0 && page !== 'config' && (
         <div className="banner warn">
           Falta configurar: <ul>{status.problems.map((p) => <li key={p}>{p}</li>)}</ul>
-          <button className="btn link" onClick={() => setPage('config')}>Abrir Configuração</button>
+          <button className="btn link" onClick={() => setPage('config')}>Abrir configuração</button>
         </div>
       )}
       {status && status.policies.files.length === 0 && page === 'fila' && (
-        <div className="banner warn">Nenhuma política carregada. <button className="btn link" onClick={() => setPage('docs')}>Abrir Documentos</button></div>
+        <div className="banner warn">Nenhuma política carregada. <button className="btn link" onClick={() => setPage('docs')}>Abrir documentos</button></div>
       )}
       {status?.policies.truncated && page === 'fila' && <div className="banner warn">As políticas passaram do limite e foram cortadas. Reduza ou resuma os documentos.</div>}
 
@@ -129,10 +186,15 @@ export function App() {
         <main className="cols">
           <aside className="list">
             <div className="tabs">
-              <button className={filter === 'pending' ? 'tab on' : 'tab'} onClick={() => { setFilter('pending'); setSelectedId(null); }}>Aguardando ({pendingCount})</button>
-              <button className={filter === 'all' ? 'tab on' : 'tab'} onClick={() => { setFilter('all'); setSelectedId(null); }}>Histórico</button>
+              <button className={filter === 'unread' ? 'tab on' : 'tab'} onClick={() => { setFilter('unread'); setSelectedId(null); }}>Não lidos ({unreadCount})</button>
+              <button className={filter === 'sent' ? 'tab on' : 'tab'} onClick={() => { setFilter('sent'); setSelectedId(null); }}>Respondidos ({sentCount})</button>
+              <button className={filter === 'archived' ? 'tab on' : 'tab'} onClick={() => { setFilter('archived'); setSelectedId(null); }}>Arquivados ({archivedCount})</button>
             </div>
-            {items.length === 0 && <p className="empty">{filter === 'pending' ? 'Nenhum e-mail aguardando. 🎉' : 'Nada por aqui ainda.'}</p>}
+            {items.length === 0 && (
+              <p className="empty">
+                {filter === 'unread' ? 'Nenhum não lido na fila.' : filter === 'sent' ? 'Nenhum respondido ainda.' : 'Nenhum arquivado ainda.'}
+              </p>
+            )}
             {items.map((i) => (
               <button key={i.id} className={`row ${i.id === selected?.id ? 'sel' : ''}`} onClick={() => setSelectedId(i.id)}>
                 <span className={`dot ${i.status === 'error' ? 'err' : i.risk ?? ''}`} />
@@ -143,21 +205,29 @@ export function App() {
             ))}
           </aside>
           <section className="detail">
-            {selected ? <Detail key={selected.id} item={selected} onChange={refresh} /> : <p className="empty">Selecione um e-mail.</p>}
+            {selected ? <Detail key={selected.id} item={selected} onChange={refresh} /> : <p className="empty">Selecione um e-mail à esquerda.</p>}
           </section>
         </main>
       )}
 
       {page === 'config' && (
-        <SettingsPage
-          setup={status?.setup ?? null}
-          onSaved={() => void refresh()}
-          gmailConnected={!!status?.gmail.connected}
-          needsReauth={!!status?.gmail.needsReauth}
-          onOpenDocs={() => setPage('docs')}
-        />
+        <>
+          <div className="back-row"><button type="button" className="btn ghost" onClick={() => setPage('fila')}>← Voltar à fila</button></div>
+          <SettingsPage
+            setup={status?.setup ?? null}
+            onSaved={() => void refresh()}
+            gmailConnected={!!status?.gmail.connected}
+            needsReauth={!!status?.gmail.needsReauth}
+            onOpenDocs={() => setPage('docs')}
+          />
+        </>
       )}
-      {page === 'docs' && <DocsPage onChanged={() => void refresh()} />}
+      {page === 'docs' && (
+        <>
+          <div className="back-row"><button type="button" className="btn ghost" onClick={() => setPage('fila')}>← Voltar à fila</button></div>
+          <DocsPage onChanged={() => void refresh()} />
+        </>
+      )}
     </div>
   );
 }
@@ -293,12 +363,12 @@ function Detail({ item, onChange }: { item: Item; onChange: () => Promise<void> 
           <button className="btn primary" disabled={!!busy || !text.trim()} onClick={() => void run('send', () => api.send(item.id, text), 'Enviar esta resposta agora para ' + item.from_email + '?')}>{busy === 'send' ? 'Enviando…' : 'Enviar'}</button>
           <button className="btn" disabled={!!busy || !dirty} onClick={() => void run('save', () => api.save(item.id, text))}>{busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}</button>
           <button className="btn danger" disabled={!!busy} onClick={() => void run('discard', () => api.discard(item.id), 'Descartar este rascunho? O e-mail original continua na sua caixa.')}>Descartar</button>
-          <button className="btn" disabled={!!busy} onClick={() => void run('archive', () => api.archive(item.id), 'Arquivar no Gmail (sai da inbox) e tirar da fila? O rascunho será apagado.')}>{busy === 'archive' ? 'Arquivando…' : 'Arquivar'}</button>
+          <button className="btn" disabled={!!busy} onClick={() => void run('archive', () => api.archive(item.id), 'Arquivar?\n\n• Sai da Caixa de entrada\n• Marcador "Arquivados"\n• Some da fila\n\n(Não lidos ficam na inbox; Enviar usa o marcador "Respondidos".)')}>{busy === 'archive' ? 'Arquivando…' : 'Arquivar'}</button>
         </div>
       )}
       {item.status === 'error' && (
         <div className="actions">
-          <button className="btn" disabled={!!busy} onClick={() => void run('archive', () => api.archive(item.id), 'Arquivar no Gmail (sai da inbox) e tirar da fila?')}>{busy === 'archive' ? 'Arquivando…' : 'Arquivar'}</button>
+          <button className="btn" disabled={!!busy} onClick={() => void run('archive', () => api.archive(item.id), 'Arquivar? Sai da Caixa de entrada e marca "Arquivados".')}>{busy === 'archive' ? 'Arquivando…' : 'Arquivar'}</button>
         </div>
       )}
       {(editable || item.status === 'error') && (
@@ -389,7 +459,7 @@ function SettingsPage({
   return (
     <main className="panel">
       <h2>Configuração</h2>
-      <p className="lead">Tudo fica só neste Mac. Não precisa editar arquivo <code>.env</code>.</p>
+      <p className="lead">Chaves e conta ficam só neste computador. No dia a dia você quase não precisa voltar aqui.</p>
       {setup && !setup.ready && <SetupChecklist setup={setup} onOpenDocs={onOpenDocs} />}
 
       <section className="form-block">

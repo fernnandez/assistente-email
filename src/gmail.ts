@@ -319,9 +319,63 @@ export class GmailClient {
     return (r.messages ?? []).map((m) => m.id);
   }
 
-  /** Arquiva: tira da inbox (label INBOX), mantém o e-mail na conta. */
-  async archiveMessage(id: string): Promise<void> {
-    await this.api(`/messages/${id}/modify`, { method: 'POST', body: { removeLabelIds: ['INBOX'] } });
+  /**
+   * Garante um marcador do usuário (ex.: "Respondido") e devolve o id.
+   * Cache em state para não listar labels a cada clique.
+   */
+  async ensureUserLabel(name: string): Promise<string> {
+    const key = `gmail_label:${name.toLowerCase()}`;
+    const cached = this.store.getState(key);
+    if (cached) return cached;
+    const listed = await this.api<{ labels?: { id: string; name: string; type?: string }[] }>('/labels');
+    const existing = (listed.labels ?? []).find((l) => l.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      this.store.setState(key, existing.id);
+      return existing.id;
+    }
+    const created = await this.api<{ id: string }>('/labels', {
+      method: 'POST',
+      body: {
+        name,
+        labelListVisibility: 'labelShow',
+        messageListVisibility: 'show',
+      },
+    });
+    this.store.setState(key, created.id);
+    return created.id;
+  }
+
+  /**
+   * Como o Arquivar do Gmail: tira da Caixa de entrada (some da inbox).
+   * Continua em "Todos os e-mails". Opcionalmente aplica um marcador (ex.: Respondido).
+   * Opera no fio inteiro para a conversa sair da inbox de uma vez.
+   */
+  async archiveMessage(messageId: string, opts: { threadId?: string; labelName?: string } = {}): Promise<void> {
+    const labelName = (opts.labelName ?? 'Arquivados').trim();
+    const addLabelIds: string[] = [];
+    if (labelName) {
+      try {
+        addLabelIds.push(await this.ensureUserLabel(labelName));
+      } catch (e) {
+        if (e instanceof GmailError && (e.status === 403 || e.status === 401)) {
+          throw new GmailError(e.status, 'Sem permissão para arquivar no Gmail. Em Configuração: Desconectar e Conectar Gmail de novo (precisa do escopo gmail.modify).');
+        }
+        throw e;
+      }
+    }
+    const body = { removeLabelIds: ['INBOX'], addLabelIds };
+    try {
+      if (opts.threadId) {
+        await this.api(`/threads/${opts.threadId}/modify`, { method: 'POST', body });
+      } else {
+        await this.api(`/messages/${messageId}/modify`, { method: 'POST', body });
+      }
+    } catch (e) {
+      if (e instanceof GmailError && (e.status === 403 || e.status === 401)) {
+        throw new GmailError(e.status, 'Sem permissão para arquivar no Gmail. Em Configuração: Desconectar e Conectar Gmail de novo (precisa do escopo gmail.modify).');
+      }
+      throw e;
+    }
   }
 
   // rascunhos

@@ -149,6 +149,12 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
   // ── fila
   app.get('/api/items', async (req) => {
     const s = (req.query as { status?: string }).status;
+    // unread = fila ativa (não lidos / aguardando); sent = Respondidos; archived = Arquivados
+    if (s === 'unread') {
+      return store.listItems('pending').concat(store.listItems('error'))
+        .sort((a, b) => b.received_at.localeCompare(a.received_at))
+        .map(view);
+    }
     const status = s === 'pending' || s === 'sent' || s === 'discarded' || s === 'archived' || s === 'error' ? s : 'visible';
     return store.listItems(status).map(view);
   });
@@ -186,6 +192,11 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
     return view(store.updateItem(item.id, { reply_body: b.reply_body, reply_subject: subject, draft_id: draftId }));
   });
 
+  /** Sai da Caixa de entrada e aplica marcador (Respondidos / Arquivados). */
+  async function leaveInbox(item: Item, labelName: 'Respondidos' | 'Arquivados'): Promise<void> {
+    await gmail.archiveMessage(item.gmail_message_id, { threadId: item.thread_id, labelName });
+  }
+
   app.post('/api/items/:id/send', async (req) => {
     const item = getItem(req.params);
     if (item.status !== 'pending') throw Object.assign(new Error('Este item não está mais pendente.'), { statusCode: 409 });
@@ -194,6 +205,15 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
     if (!body.trim()) throw Object.assign(new Error('Resposta vazia.'), { statusCode: 400 });
     const draftId = await syncDraft(item, b.reply_subject ?? item.reply_subject, body);
     await gmail.sendDraft(draftId);
+    try {
+      await leaveInbox(item, 'Respondidos');
+    } catch (e) {
+      // Envio já aconteceu; avisa sem reverter o sent
+      const msg = e instanceof Error ? e.message : String(e);
+      const out = store.updateItem(item.id, { status: 'sent', reply_body: body, draft_id: draftId, internal_notes: [item.internal_notes, `Enviado, mas não saiu da inbox: ${msg}`].filter(Boolean).join(' ') });
+      bus.emit('change', { type: 'item', id: item.id, status: 'sent' });
+      return view(out);
+    }
     const out = store.updateItem(item.id, { status: 'sent', reply_body: body, draft_id: draftId });
     bus.emit('change', { type: 'item', id: item.id, status: 'sent' });
     return view(out);
@@ -217,11 +237,8 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
     if (item.draft_id) {
       try { await gmail.deleteDraft(item.draft_id); } catch (e) { if (!(e instanceof GmailError && e.status === 404)) throw e; }
     }
-    try {
-      await gmail.archiveMessage(item.gmail_message_id);
-    } catch (e) {
-      if (!(e instanceof GmailError && e.status === 404)) throw e;
-    }
+    // Sem engolir erro: se não sair da inbox, ela precisa ver a mensagem (reconectar OAuth).
+    await leaveInbox(item, 'Arquivados');
     const out = store.updateItem(item.id, { status: 'archived', draft_id: null });
     bus.emit('change', { type: 'item', id: item.id, status: 'archived' });
     return view(out);

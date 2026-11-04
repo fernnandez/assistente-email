@@ -32,7 +32,12 @@ Regras da empresa que o modelo usa para rascunhar.
 ## 4. Uso no dia a dia
 1. Duplo clique em `Abrir Assistente.command` (se já estiver rodando, só reabre o navegador).
 2. Deixe a **aba do navegador** aberta; use **Ativar avisos** se quiser notificação de e-mail novo.
-3. Na **Fila**, revise o rascunho → **Enviar**, **Descartar**, **Arquivar** (tira da inbox no Gmail) ou **Refazer**.
+3. Na **Fila**, três abas claras (e o mesmo no Gmail):
+   - **Não lidos** — ainda na fila / Caixa de entrada
+   - **Respondidos** — você clicou em **Enviar** (sai da inbox + marcador Respondidos)
+   - **Arquivados** — você clicou em **Arquivar** (sai da inbox + marcador Arquivados)
+   - **Descartar** só tira do app (e-mail pode continuar na inbox)
+   - “Todos os e-mails” no Gmail sempre mostra o histórico — o que esvazia é a **Caixa de entrada**.
 4. **Sincronizar anteriores** busca não lidos dos últimos 7 dias (até 30) que chegaram antes do app estar ligado — gera rascunhos (usa o modelo).
 5. Ao terminar o dia (opcional): `Encerrar Assistente.command`.
 

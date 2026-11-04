@@ -70,7 +70,7 @@ async function call<T>(path: string, method = 'GET', body?: unknown): Promise<T>
 
 export const api = {
   status: () => call<StatusInfo>('/api/status'),
-  items: (status: 'pending' | 'all') => call<Item[]>(`/api/items?status=${status}`),
+  items: (status: 'unread' | 'sent' | 'archived' | 'pending' | 'all') => call<Item[]>(`/api/items?status=${status}`),
   save: (id: number, reply_body: string) => call<Item>(`/api/items/${id}/draft`, 'PUT', { reply_body }),
   send: (id: number, reply_body: string) => call<Item>(`/api/items/${id}/send`, 'POST', { reply_body }),
   discard: (id: number) => call<Item>(`/api/items/${id}/discard`, 'POST', {}),
