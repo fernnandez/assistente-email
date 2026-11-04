@@ -25,6 +25,8 @@ export interface Customer {
   personId: number | null;
   name: string | null;
   org: string | null;
+  /** Link/ID da pasta no Drive vindo de campo personalizado do Pipedrive (negócio). */
+  driveFolderUrl: string | null;
   /** texto com o histórico, pronto para o prompt */
   text: string;
 }

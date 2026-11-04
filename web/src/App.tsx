@@ -447,6 +447,8 @@ function SettingsPage({
   const [driveRoot, setDriveRoot] = useState('');
   const [driveMode, setDriveMode] = useState<DriveMatchMode>('pipedrive_org');
   const [driveMap, setDriveMap] = useState('');
+  const [drivePdField, setDrivePdField] = useState('');
+  const [driveReadContents, setDriveReadContents] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -467,6 +469,8 @@ function SettingsPage({
       setDriveRoot(cur.drive?.rootFolderId ?? '');
       setDriveMode(cur.drive?.matchMode ?? 'pipedrive_org');
       setDriveMap(cur.drive?.domainMap ?? '');
+      setDrivePdField(cur.drive?.pipedriveFieldKey ?? '');
+      setDriveReadContents(cur.drive?.readContents ?? false);
     }).catch((e) => setErr(e instanceof Error ? e.message : String(e)));
   }, []);
 
@@ -483,6 +487,8 @@ function SettingsPage({
           rootFolderId: driveRoot,
           matchMode: driveMode,
           domainMap: driveMap,
+          pipedriveFieldKey: drivePdField,
+          readContents: driveReadContents,
         },
       };
       if (secretTouched) patch.google!.clientSecret = clientSecret;
@@ -589,8 +595,8 @@ function SettingsPage({
         <h3>5. Google Drive <span className="optional">(opcional)</span></h3>
         <p className="hint">
           Quando o e-mail falar de contrato, proposta, NF etc., o assistente localiza a pasta do cliente
-          sob a pasta-raiz e pode ler trechos (Docs, PDF com texto, planilhas). Ative a <strong>Drive API</strong> no mesmo
-          projeto GCP e <strong>Desconecte → Conecte Gmail</strong> de novo para autorizar a leitura.
+          (preferência: link no Pipedrive) e lista arquivos. Ative a <strong>Drive API</strong> no mesmo
+          projeto GCP e <strong>Desconecte → Conecte Gmail</strong> de novo para autorizar.
         </p>
         <label className="check">
           <input type="checkbox" checked={driveEnabled} onChange={(e) => setDriveEnabled(e.target.checked)} />
@@ -605,25 +611,48 @@ function SettingsPage({
             autoComplete="off"
           />
         </label>
-        <label>Como achar a pasta do cliente
+        <label>Chave do campo Drive no Pipedrive (negócio)
+          <input
+            value={drivePdField}
+            onChange={(e) => setDrivePdField(e.target.value)}
+            placeholder="c9490f9e1c470f40ce93d9b0fafc687c7858053c"
+            disabled={!driveEnabled}
+            autoComplete="off"
+          />
+        </label>
+        <p className="hint">Se preenchida, usa o link da pasta em cada negócio — pasta exata, sem risco de homônimo.</p>
+        <label>Como achar a pasta se o Pipedrive não tiver o link
           <select value={driveMode} onChange={(e) => setDriveMode(e.target.value as DriveMatchMode)} disabled={!driveEnabled}>
-            <option value="pipedrive_org">Empresa do Pipedrive + domínio do e-mail</option>
+            <option value="pipedrive_org">Empresa do Pipedrive + domínio (ignora gmail/hotmail)</option>
             <option value="company_name">Nome da empresa / contato</option>
             <option value="email_domain">Domínio do e-mail (ex.: acme.com)</option>
           </select>
         </label>
         <label>Mapa fixo domínio → pasta (opcional)
           <textarea
-            rows={4}
+            rows={3}
             value={driveMap}
             onChange={(e) => setDriveMap(e.target.value)}
             placeholder={'acme.com=ID_DA_PASTA\noutra.com=https://drive.google.com/drive/folders/…'}
             disabled={!driveEnabled}
           />
         </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={driveReadContents}
+            onChange={(e) => setDriveReadContents(e.target.checked)}
+            disabled={!driveEnabled}
+          />
+          Ler conteúdo dos arquivos (PDF/Docs) — desligado = só nomes e datas
+        </label>
         <p className="hint">
           {driveEnabled
-            ? (driveRoot.trim() ? 'Drive ativo — pastas filhas da raiz serão buscadas nos e-mails sobre documentos.' : 'Marcado, mas falta a pasta-raiz.')
+            ? (driveRoot.trim()
+              ? (driveReadContents
+                ? 'Drive ativo com leitura de conteúdo. Prefira o campo Pipedrive para pastas exatas.'
+                : 'Drive ativo: só lista nomes/datas (recomendado com docs pessoais).')
+              : 'Marcado, mas falta a pasta-raiz.')
             : 'Desligado: o rascunho não consulta o Drive.'}
         </p>
       </section>

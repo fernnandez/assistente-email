@@ -52,6 +52,8 @@ if (hasFlag('status')) {
     driveEnabled: pub.drive.enabled,
     driveRootConfigured: !!pub.drive.rootFolderId,
     driveMatchMode: pub.drive.matchMode,
+    drivePipedriveField: !!pub.drive.pipedriveFieldKey,
+    driveReadContents: pub.drive.readContents,
     policies: pol.files,
     gmailEmail: store.getState('google_email'),
   }, null, 2));
@@ -76,15 +78,18 @@ const pdDomain = arg('pipedrive-domain');
 const pdToken = arg('pipedrive-token');
 const driveRoot = arg('drive-root');
 const driveMap = arg('drive-map');
+const drivePdField = arg('drive-pd-field');
 const driveMode = arg('drive-mode') as 'email_domain' | 'company_name' | 'pipedrive_org' | undefined;
 const driveEnabled = hasFlag('drive-enabled') ? true : hasFlag('drive-disabled') ? false : undefined;
+const driveReadContents = hasFlag('drive-read-contents') ? true : hasFlag('drive-list-only') ? false : undefined;
 
 const touched =
   companyName !== undefined || signature !== undefined || signatureEn !== undefined ||
   llmKey !== undefined || llmUrl !== undefined || llmModel !== undefined ||
   googleId !== undefined || googleSecret !== undefined ||
   pdDomain !== undefined || pdToken !== undefined ||
-  driveRoot !== undefined || driveMap !== undefined || driveMode !== undefined || driveEnabled !== undefined;
+  driveRoot !== undefined || driveMap !== undefined || driveMode !== undefined ||
+  driveEnabled !== undefined || drivePdField !== undefined || driveReadContents !== undefined;
 
 if (touched) {
   saveSettings(store, {
@@ -111,6 +116,8 @@ if (touched) {
       ...(driveRoot !== undefined ? { rootFolderId: driveRoot } : {}),
       ...(driveMap !== undefined ? { domainMap: driveMap } : {}),
       ...(driveMode !== undefined ? { matchMode: driveMode } : {}),
+      ...(drivePdField !== undefined ? { pipedriveFieldKey: drivePdField } : {}),
+      ...(driveReadContents !== undefined ? { readContents: driveReadContents } : {}),
     },
   });
   console.log('Configuração salva em data/assistente.db (segredos não são exibidos).');
@@ -125,7 +132,8 @@ if (!touched && !hasFlag('seed-policies') && !hasFlag('status')) {
     --llm-key "…" --llm-url "https://ai-gateway.vercel.sh/v1" --llm-model "openai/gpt-4.1" \\
     --google-id "….apps.googleusercontent.com" --google-secret "…" \\
     --pipedrive-domain "empresa" --pipedrive-token "…" \\
-    --drive-enabled --drive-root "FOLDER_ID_OU_URL" --drive-mode pipedrive_org
+    --drive-enabled --drive-root "FOLDER_ID_OU_URL" --drive-mode pipedrive_org \\
+    --drive-pd-field "HASH_CAMPO_DRIVE" --drive-list-only
 
 Depois: npm run build && npm start
 A usuária ainda precisa abrir http://127.0.0.1:3210 e clicar em Conectar Gmail

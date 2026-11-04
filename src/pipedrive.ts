@@ -6,11 +6,30 @@ import type { Customer } from './types';
 export interface PdDeal {
   title: string; status: string; stage_id: number; value: number; currency: string;
   add_time?: string; won_time?: string | null; lost_time?: string | null; lost_reason?: string | null; expected_close_date?: string | null;
+  /** Campos personalizados (hash do Pipedrive) vêm misturados no objeto. */
+  [key: string]: unknown;
 }
 export interface PdActivity { subject: string; type: string; due_date: string; done: boolean }
 export interface PdNote { content: string; add_time: string }
 
 const d10 = (v?: string | null) => (v ? String(v).slice(0, 10) : null);
+
+/** Lê o campo personalizado “Drive” (ou outro) nos negócios — open > won > demais. */
+export function pickDriveFolderFromDeals(deals: PdDeal[], fieldKey: string): string | null {
+  const key = fieldKey.trim();
+  if (!key || !deals.length) return null;
+  const rank = (status: string) => (status === 'open' ? 0 : status === 'won' ? 1 : 2);
+  const sorted = [...deals].sort((a, b) => rank(String(a.status)) - rank(String(b.status)));
+  for (const d of sorted) {
+    const v = d[key];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+    if (v && typeof v === 'object' && 'value' in (v as object)) {
+      const inner = (v as { value: unknown }).value;
+      if (typeof inner === 'string' && inner.trim()) return inner.trim();
+    }
+  }
+  return null;
+}
 
 export function formatCustomer(args: {
   name: string; org: string | null; deals: PdDeal[]; activities: PdActivity[]; stages: Record<number, string>; notes: PdNote[];
@@ -65,13 +84,13 @@ async function pd<T>(path: string, params: Record<string, string | number> = {})
 /** Procura o cliente pelo e-mail do remetente (correspondência exata) e monta o histórico. */
 export async function lookupCustomer(email: string): Promise<Customer> {
   if (!isPipedriveConfigured()) {
-    return { known: false, personId: null, name: null, org: null, text: 'Pipedrive não configurado: sem histórico do cliente.' };
+    return { known: false, personId: null, name: null, org: null, driveFolderUrl: null, text: 'Pipedrive não configurado: sem histórico do cliente.' };
   }
   const search = await pd<{ items?: { item: { id: number; name: string; organization?: { name: string } | null } }[] }>('/v1/persons/search', {
     term: email, fields: 'email', exact_match: 'true', limit: 1,
   });
   const person = search?.items?.[0]?.item;
-  if (!person) return { known: false, personId: null, name: null, org: null, text: NEW_CONTACT };
+  if (!person) return { known: false, personId: null, name: null, org: null, driveFolderUrl: null, text: NEW_CONTACT };
 
   const [deals, activities, stagesList, notes] = await Promise.all([
     pd<PdDeal[] | null>(`/v1/persons/${person.id}/deals`, { limit: 10 }),
@@ -81,8 +100,10 @@ export async function lookupCustomer(email: string): Promise<Customer> {
   ]);
   const stages = Object.fromEntries((stagesList ?? []).map((s) => [s.id, s.name]));
   const org = person.organization?.name ?? null;
+  const dealList = deals ?? [];
+  const driveFolderUrl = pickDriveFolderFromDeals(dealList, runtime().drive.pipedriveFieldKey);
   return {
-    known: true, personId: person.id, name: person.name, org,
-    text: formatCustomer({ name: person.name, org, deals: deals ?? [], activities: activities ?? [], stages, notes: notes ?? [] }),
+    known: true, personId: person.id, name: person.name, org, driveFolderUrl,
+    text: formatCustomer({ name: person.name, org, deals: dealList, activities: activities ?? [], stages, notes: notes ?? [] }),
   };
 }

@@ -61,10 +61,11 @@ npm run configure -- \
   --google-secret "SEGredo" \
   --pipedrive-domain "dominio" \
   --pipedrive-token "token" \
-  --drive-enabled --drive-root "FOLDER_ID_OU_URL" --drive-mode pipedrive_org
+  --drive-enabled --drive-root "FOLDER_ID_OU_URL" --drive-mode pipedrive_org \
+  --drive-pd-field "HASH_CAMPO_DRIVE" --drive-list-only
 ```
 
-Drive (opcional): mesma OAuth do Gmail com escopo `drive.readonly`. Ativar **Google Drive API** no GCP; a usuária deve **Desconectar → Conectar Gmail** de novo. Pasta-raiz = pasta onde ficam as pastas dos clientes.
+Drive (opcional): mesma OAuth do Gmail com escopo `drive.readonly`. Ativar **Google Drive API** no GCP; a usuária deve **Desconectar → Conectar Gmail** de novo. Preferir `--drive-pd-field` (link da pasta no negócio Pipedrive). Sem isso, busca por nome na raiz. `--drive-list-only` = só metadados.
 
 Verificar (sem secrets):
 ```bash

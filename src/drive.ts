@@ -35,6 +35,16 @@ const SLIDE_MIME = 'application/vnd.google-apps.presentation';
 const DOC_HINT =
   /\b(contrato|contratos|proposta|propostas|aditivo|aditivos|documento|documentos|anexo|anexos|cl[aá]usula|cl[aá]usulas|assinatura|assinado|pdf|nota\s*fiscal|\bnf\b|nfe|boleto|recibo|sla|termo|termos|nda|acordo|minuta|política|politica|drive|pasta)\b/i;
 
+/** Domínios de e-mail pessoal — não usar como nome de pasta do cliente. */
+export const GENERIC_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com',
+  'hotmail.com', 'hotmail.com.br', 'outlook.com', 'outlook.com.br', 'live.com', 'live.com.br', 'msn.com',
+  'yahoo.com', 'yahoo.com.br', 'ymail.com',
+  'icloud.com', 'me.com', 'mac.com',
+  'aol.com', 'proton.me', 'protonmail.com', 'pm.me',
+  'uol.com.br', 'bol.com.br', 'terra.com.br', 'ig.com.br',
+]);
+
 const MAX_LIST = 8;
 const MAX_READ = 3;
 const MAX_CHARS_PER_FILE = 8000;
@@ -74,6 +84,9 @@ export function parseFolderId(input: string): string | null {
   if (!s) return null;
   const fromUrl = s.match(/\/folders\/([a-zA-Z0-9_-]+)/);
   if (fromUrl) return fromUrl[1]!;
+  // open?id= /file links às vezes usam id=
+  const fromIdParam = s.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (fromIdParam) return fromIdParam[1]!;
   if (/^[a-zA-Z0-9_-]{10,}$/.test(s)) return s;
   return null;
 }
@@ -90,6 +103,15 @@ export function normalizeName(s: string): string {
 export function emailDomain(email: string): string {
   const at = email.lastIndexOf('@');
   return at >= 0 ? email.slice(at + 1).toLowerCase() : '';
+}
+
+export function isGenericEmailDomain(domain: string): boolean {
+  return GENERIC_EMAIL_DOMAINS.has(domain.trim().toLowerCase());
+}
+
+/** Escapa aspas simples para a query `q` da Drive API. */
+export function escapeDriveQuery(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 /** Linhas `dominio.com=folderId` (ou URL da pasta). */
@@ -126,6 +148,33 @@ export function scoreFolderName(folderName: string, needles: string[]): number {
   return best;
 }
 
+/** Termos para busca de pasta (sem domínio genérico). */
+export function folderSearchNeedles(args: {
+  mode: DriveMatchMode;
+  fromEmail: string;
+  org: string | null;
+  name: string | null;
+}): string[] {
+  const domain = emailDomain(args.fromEmail);
+  const out: string[] = [];
+  const add = (s: string | null | undefined) => {
+    const t = (s ?? '').trim();
+    if (t.length >= 2 && !out.includes(t)) out.push(t);
+  };
+  if (args.mode === 'email_domain' || args.mode === 'pipedrive_org') {
+    if (domain && !isGenericEmailDomain(domain)) {
+      add(domain);
+      add(domain.split('.')[0]);
+    }
+  }
+  if (args.mode === 'company_name' || args.mode === 'pipedrive_org') {
+    add(args.org);
+    add(args.name);
+  }
+  if (args.mode === 'email_domain') add(args.org);
+  return out;
+}
+
 export function extractHints(email: IncomingEmail): string[] {
   const text = `${email.subject} ${email.body}`;
   const hints: string[] = [];
@@ -159,18 +208,20 @@ export function rankFiles(files: DriveFileRef[], hints: string[]): DriveFileRef[
   return [...files].sort((a, b) => score(b) - score(a) || b.modifiedTime.localeCompare(a.modifiedTime));
 }
 
-export function formatDriveContext(ctx: Omit<DriveContext, 'text'> & { contents: { name: string; body: string }[] }): string {
+export function formatDriveContext(ctx: Omit<DriveContext, 'text'> & { contents: { name: string; body: string }[]; listOnly?: boolean }): string {
   if (!ctx.consulted) return ctx.note || '(Drive não consultado)';
   if (!ctx.folderId) return ctx.note || 'Pasta do cliente não encontrada no Drive.';
   const lines = [
     `Pasta: ${ctx.folderName ?? ctx.folderId} (id=${ctx.folderId})`,
     ctx.note ? `Nota: ${ctx.note}` : '',
+    ctx.listOnly ? 'Modo: somente nomes e datas (conteúdo não lido — não invente o que está dentro dos arquivos).' : '',
     'Arquivos considerados:',
     ...(ctx.files.length
       ? ctx.files.map((f) => {
           const flag = f.read ? ' [conteúdo lido]' : '';
           const extra = f.note ? ` — ${f.note}` : '';
-          return `- ${f.name} (${f.mimeType}; mod. ${f.modifiedTime.slice(0, 10)})${flag}${extra}\n  ${f.webViewLink}`;
+          const when = f.modifiedTime ? `; mod. ${f.modifiedTime.slice(0, 10)}` : '';
+          return `- ${f.name} (${f.mimeType}${when})${flag}${extra}\n  ${f.webViewLink}`;
         })
       : ['- nenhum arquivo relevante na pasta']),
   ].filter(Boolean);
@@ -224,13 +275,11 @@ export class DriveClient {
     return (text ? JSON.parse(text) : undefined) as T;
   }
 
-  private async listChildren(parentId: string, opts: { foldersOnly?: boolean; pageSize?: number } = {}): Promise<DriveApiFile[]> {
-    const parts = [`'${parentId}' in parents`, 'trashed = false'];
-    if (opts.foldersOnly) parts.push(`mimeType = '${FOLDER_MIME}'`);
-    const q = new URLSearchParams({
-      q: parts.join(' and '),
+  private async queryFiles(q: string, pageSize = 25): Promise<DriveApiFile[]> {
+    const params = new URLSearchParams({
+      q,
       fields: 'files(id,name,mimeType,modifiedTime,webViewLink),nextPageToken',
-      pageSize: String(opts.pageSize ?? 100),
+      pageSize: String(pageSize),
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
       corpora: 'allDrives',
@@ -238,55 +287,96 @@ export class DriveClient {
     const out: DriveApiFile[] = [];
     let pageToken: string | undefined;
     do {
-      if (pageToken) q.set('pageToken', pageToken);
-      const r = await this.api<{ files?: DriveApiFile[]; nextPageToken?: string }>(`/files?${q}`);
+      if (pageToken) params.set('pageToken', pageToken);
+      const r = await this.api<{ files?: DriveApiFile[]; nextPageToken?: string }>(`/files?${params}`);
       out.push(...(r.files ?? []));
       pageToken = r.nextPageToken;
-    } while (pageToken && out.length < 400);
+    } while (pageToken && out.length < 100);
     return out;
+  }
+
+  private async listChildren(parentId: string, opts: { foldersOnly?: boolean; pageSize?: number } = {}): Promise<DriveApiFile[]> {
+    const parts = [`'${parentId}' in parents`, 'trashed = false'];
+    if (opts.foldersOnly) parts.push(`mimeType = '${FOLDER_MIME}'`);
+    return this.queryFiles(parts.join(' and '), opts.pageSize ?? 100);
+  }
+
+  /** Busca pasta filha da raiz por nome (= depois contains) — escala com milhares de pastas. */
+  async searchFoldersInRoot(rootId: string, needle: string): Promise<DriveApiFile[]> {
+    const raw = needle.trim();
+    if (raw.length < 2) return [];
+    const safe = escapeDriveQuery(raw);
+    const base = `'${rootId}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`;
+    const exact = await this.queryFiles(`${base} and name = '${safe}'`, 10);
+    if (exact.length) return exact;
+    return this.queryFiles(`${base} and name contains '${safe}'`, 25);
+  }
+
+  private async getFolderMeta(id: string): Promise<{ id: string; name: string } | null> {
+    try {
+      const f = await this.api<DriveApiFile>(`/files/${id}?fields=id,name,mimeType,trashed&supportsAllDrives=true`);
+      if (!f?.id || f.mimeType !== FOLDER_MIME) return null;
+      return { id: f.id, name: f.name };
+    } catch {
+      return null;
+    }
   }
 
   async resolveClientFolder(args: {
     fromEmail: string;
     org: string | null;
     name: string | null;
+    driveFolderUrl?: string | null;
   }): Promise<{ id: string; name: string; note: string } | null> {
     const cfg = runtime().drive;
     const rootId = parseFolderId(cfg.rootFolderId);
     if (!rootId) return null;
 
+    // 1) Link/ID do Pipedrive (preferencial — pasta exata, sem ambiguidade de nome)
+    const fromCrm = parseFolderId(args.driveFolderUrl ?? '');
+    if (fromCrm) {
+      const meta = await this.getFolderMeta(fromCrm);
+      return {
+        id: fromCrm,
+        name: meta?.name ?? fromCrm,
+        note: 'pasta do campo Drive no Pipedrive',
+      };
+    }
+
+    // 2) Mapa fixo domínio → pasta
     const domain = emailDomain(args.fromEmail);
     const map = parseDomainMap(cfg.domainMap);
     if (domain && map[domain]) {
-      return { id: map[domain]!, name: domain, note: `pasta fixa pelo domínio ${domain}` };
+      const id = map[domain]!;
+      const meta = await this.getFolderMeta(id);
+      return { id, name: meta?.name ?? domain, note: `pasta fixa pelo domínio ${domain}` };
     }
 
-    const folders = await this.listChildren(rootId, { foldersOnly: true });
-    if (!folders.length) return null;
+    // 3) Busca por nome na raiz (sem listar milhares de pastas)
+    const needles = folderSearchNeedles({
+      mode: cfg.matchMode,
+      fromEmail: args.fromEmail,
+      org: args.org,
+      name: args.name,
+    });
+    if (!needles.length) return null;
 
-    const mode = cfg.matchMode;
-    const needles: string[] = [];
-    if (mode === 'email_domain' || mode === 'pipedrive_org') {
-      if (domain) {
-        needles.push(domain, domain.split('.')[0] ?? domain);
+    let best: { file: DriveApiFile; score: number; needle: string } | null = null;
+    for (const needle of needles) {
+      const found = await this.searchFoldersInRoot(rootId, needle);
+      for (const f of found) {
+        const score = scoreFolderName(f.name, [needle, ...needles]);
+        if (!best || score > best.score) best = { file: f, score, needle };
       }
+      // match exato (100) — pode parar
+      if (best && best.score >= 100) break;
     }
-    if (mode === 'company_name' || mode === 'pipedrive_org') {
-      if (args.org) needles.push(args.org);
-      if (args.name) needles.push(args.name);
-    }
-    if (mode === 'email_domain' && args.org) needles.push(args.org);
-
-    let best: { file: DriveApiFile; score: number } | null = null;
-    for (const f of folders) {
-      const score = scoreFolderName(f.name, needles);
-      if (!best || score > best.score) best = { file: f, score };
-    }
-    if (!best || best.score < 40) return null;
+    // Exige match forte para reduzir pasta de outro cliente com nome parecido
+    if (!best || best.score < 70) return null;
     return {
       id: best.file.id,
       name: best.file.name,
-      note: `pasta encontrada por ${mode} (score ${best.score})`,
+      note: `pasta encontrada por busca "${best.needle}" (score ${best.score})`,
     };
   }
 
@@ -372,6 +462,7 @@ export class DriveClient {
       fromEmail: email.fromEmail,
       org: customer.org,
       name: customer.name ?? (email.fromName || null),
+      driveFolderUrl: customer.driveFolderUrl,
     });
     if (!folder) {
       return {
@@ -379,7 +470,7 @@ export class DriveClient {
         folderId: null,
         folderName: null,
         files: [],
-        note: 'Pasta do cliente não encontrada sob a pasta-raiz do Drive. Confira o nome da pasta ou o mapa domínio→pasta.',
+        note: 'Pasta do cliente não encontrada. Prefira o campo Drive no Pipedrive, ou confira o nome da pasta / mapa domínio→pasta.',
         text: 'Pasta do cliente não encontrada no Google Drive. Não invente cláusulas nem conteúdo de documentos; diga que vai confirmar internamente.',
       };
     }
@@ -387,25 +478,27 @@ export class DriveClient {
     const hints = extractHints(email);
     const all = await this.listDocsInFolder(folder.id);
     const ranked = rankFiles(all, hints).slice(0, MAX_LIST);
-    const toRead = ranked.slice(0, MAX_READ);
+    const listOnly = !runtime().drive.readContents;
     const contents: { name: string; body: string }[] = [];
-    let total = 0;
 
-    for (const f of toRead) {
-      if (total >= MAX_TOTAL_CHARS) break;
-      const { text, note } = await this.readContent(f);
-      f.read = !!text;
-      f.note = note;
-      if (!text) continue;
-      let body = text.replace(/\r/g, '').trim();
-      if (body.length > MAX_CHARS_PER_FILE) {
-        body = `${body.slice(0, MAX_CHARS_PER_FILE)}\n…[truncado]`;
+    if (!listOnly) {
+      let total = 0;
+      for (const f of ranked.slice(0, MAX_READ)) {
+        if (total >= MAX_TOTAL_CHARS) break;
+        const { text, note } = await this.readContent(f);
+        f.read = !!text;
+        f.note = note;
+        if (!text) continue;
+        let body = text.replace(/\r/g, '').trim();
+        if (body.length > MAX_CHARS_PER_FILE) {
+          body = `${body.slice(0, MAX_CHARS_PER_FILE)}\n…[truncado]`;
+        }
+        if (total + body.length > MAX_TOTAL_CHARS) {
+          body = `${body.slice(0, Math.max(0, MAX_TOTAL_CHARS - total))}\n…[truncado]`;
+        }
+        contents.push({ name: f.name, body });
+        total += body.length;
       }
-      if (total + body.length > MAX_TOTAL_CHARS) {
-        body = `${body.slice(0, Math.max(0, MAX_TOTAL_CHARS - total))}\n…[truncado]`;
-      }
-      contents.push({ name: f.name, body });
-      total += body.length;
     }
 
     const ctx = {
@@ -415,6 +508,7 @@ export class DriveClient {
       files: ranked,
       note: folder.note,
       contents,
+      listOnly,
     };
     return {
       consulted: true,

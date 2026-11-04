@@ -51,7 +51,7 @@ export async function buildReply(email: IncomingEmail, deps: PipelineDeps = defa
   try {
     customer = await deps.customer(email.fromEmail);
   } catch (e) {
-    customer = { known: false, personId: null, name: null, org: null, text: 'Não foi possível consultar o Pipedrive agora: sem histórico do cliente.' };
+    customer = { known: false, personId: null, name: null, org: null, driveFolderUrl: null, text: 'Não foi possível consultar o Pipedrive agora: sem histórico do cliente.' };
     crmNote = `Pipedrive indisponível (${e instanceof Error ? e.message : e}). Confira o histórico do cliente manualmente.`;
   }
 

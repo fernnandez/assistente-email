@@ -10,8 +10,8 @@ export const email = (over: Partial<IncomingEmail> = {}): IncomingEmail => ({
   receivedAt: '2026-11-03T12:00:00.000Z', automated: false, ...over,
 });
 
-export const known: Customer = { known: true, personId: 9, name: 'Maria Souza', org: 'Acme', text: 'Cliente: Maria Souza (Acme)\nSituação: CLIENTE ATIVO' };
-export const unknown: Customer = { known: false, personId: null, name: null, org: null, text: 'Contato NOVO' };
+export const known: Customer = { known: true, personId: 9, name: 'Maria Souza', org: 'Acme', driveFolderUrl: null, text: 'Cliente: Maria Souza (Acme)\nSituação: CLIENTE ATIVO' };
+export const unknown: Customer = { known: false, personId: null, name: null, org: null, driveFolderUrl: null, text: 'Contato NOVO' };
 export const policies: PolicySet = { text: '### sla.md\nPrimeira resposta em 8h úteis.', files: ['sla.md'], chars: 40, truncated: false };
 export const noDrive: DriveContext = {
   consulted: false, folderId: null, folderName: null, files: [], note: 'não consultado', text: '(Drive não consultado)',

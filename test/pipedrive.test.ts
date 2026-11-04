@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { formatCustomer } from '../src/pipedrive';
+import { formatCustomer, pickDriveFolderFromDeals } from '../src/pipedrive';
 
 const base = { name: 'Bruna', org: 'Sycode', stages: { 10: 'Negociações', 11: 'Contrato assinado' } };
 const deal = (o = {}) => ({ title: 'Plano', status: 'open', stage_id: 10, value: 100, currency: 'BRL', add_time: '2026-09-15 10:00:00', ...o });
+const DRIVE_KEY = 'c9490f9e1c470f40ce93d9b0fafc687c7858053c';
+
+describe('pickDriveFolderFromDeals', () => {
+  it('prefere negócio open e lê string ou { value }', () => {
+    expect(pickDriveFolderFromDeals([
+      deal({ status: 'won', [DRIVE_KEY]: 'https://drive.google.com/drive/folders/wonFolder99' }),
+      deal({ status: 'open', [DRIVE_KEY]: 'https://drive.google.com/drive/folders/openFolder99' }),
+    ], DRIVE_KEY)).toContain('openFolder99');
+    expect(pickDriveFolderFromDeals([
+      deal({ [DRIVE_KEY]: { value: 'https://drive.google.com/drive/folders/objFolder99' } }),
+    ], DRIVE_KEY)).toContain('objFolder99');
+    expect(pickDriveFolderFromDeals([deal()], DRIVE_KEY)).toBeNull();
+  });
+});
 
 describe('formatCustomer', () => {
   it('não inclui notas [INTERNO] nem atividades futuras (agenda interna)', () => {

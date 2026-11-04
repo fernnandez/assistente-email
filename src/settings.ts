@@ -31,6 +31,10 @@ const storedSchema = z.object({
     rootFolderId: z.string().optional(),
     matchMode: z.enum(['email_domain', 'company_name', 'pipedrive_org']).optional(),
     domainMap: z.string().optional(),
+    /** Chave do campo personalizado do negócio no Pipedrive com o link da pasta (ex.: hash do campo Drive). */
+    pipedriveFieldKey: z.string().optional(),
+    /** Se true, lê trechos dos arquivos; se false, só nomes/datas/links. */
+    readContents: z.boolean().optional(),
   }).optional(),
 });
 
@@ -62,6 +66,8 @@ export const settingsPatchSchema = z.object({
     rootFolderId: z.string().max(500).optional(),
     matchMode: z.enum(['email_domain', 'company_name', 'pipedrive_org']).optional(),
     domainMap: z.string().max(10_000).optional(),
+    pipedriveFieldKey: z.string().max(80).optional(),
+    readContents: z.boolean().optional(),
   }).optional(),
 });
 
@@ -86,6 +92,8 @@ export interface RuntimeSecrets {
     rootFolderId: string;
     matchMode: DriveMatchMode;
     domainMap: string;
+    pipedriveFieldKey: string;
+    readContents: boolean;
   };
 }
 
@@ -105,6 +113,8 @@ export interface PublicSettings {
     rootFolderId: string;
     matchMode: DriveMatchMode;
     domainMap: string;
+    pipedriveFieldKey: string;
+    readContents: boolean;
   };
 }
 
@@ -172,6 +182,9 @@ export function runtime(store: Store | null = bound): RuntimeSecrets {
       rootFolderId: (s.drive?.rootFolderId ?? '').trim(),
       matchMode: s.drive?.matchMode ?? 'pipedrive_org',
       domainMap: (s.drive?.domainMap ?? '').trim(),
+      pipedriveFieldKey: (s.drive?.pipedriveFieldKey ?? '').trim(),
+      // padrão seguro: só metadados (evita mandar passaporte/extrato ao modelo)
+      readContents: s.drive?.readContents === true,
     },
   };
 }
@@ -196,6 +209,8 @@ export function publicSettings(store: Store): PublicSettings {
       rootFolderId: r.drive.rootFolderId,
       matchMode: r.drive.matchMode,
       domainMap: r.drive.domainMap,
+      pipedriveFieldKey: r.drive.pipedriveFieldKey,
+      readContents: r.drive.readContents,
     },
   };
 }
@@ -242,6 +257,8 @@ export function saveSettings(store: Store, patch: SettingsPatch): PublicSettings
     if (patch.drive.rootFolderId !== undefined) next.drive!.rootFolderId = patch.drive.rootFolderId.trim();
     if (patch.drive.matchMode !== undefined) next.drive!.matchMode = patch.drive.matchMode;
     if (patch.drive.domainMap !== undefined) next.drive!.domainMap = patch.drive.domainMap.trim();
+    if (patch.drive.pipedriveFieldKey !== undefined) next.drive!.pipedriveFieldKey = patch.drive.pipedriveFieldKey.trim();
+    if (patch.drive.readContents !== undefined) next.drive!.readContents = patch.drive.readContents;
   }
 
   store.setState(SETTINGS_KEY, JSON.stringify(next));

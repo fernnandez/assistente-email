@@ -47,6 +47,8 @@ export interface PublicSettings {
     rootFolderId: string;
     matchMode: DriveMatchMode;
     domainMap: string;
+    pipedriveFieldKey: string;
+    readContents: boolean;
   };
 }
 
@@ -66,6 +68,8 @@ export interface SettingsPatch {
     rootFolderId?: string;
     matchMode?: DriveMatchMode;
     domainMap?: string;
+    pipedriveFieldKey?: string;
+    readContents?: boolean;
   };
 }
 

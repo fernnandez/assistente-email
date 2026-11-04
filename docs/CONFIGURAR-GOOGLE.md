@@ -49,9 +49,10 @@ https://admin.google.com → *Segurança → Controle de acesso e de dados → C
 ### Google Drive (opcional, na mesma tela)
 1. Em **Configuração → Google Drive**, marque *Consultar documentos no Drive*.
 2. Cole o **link ou ID** da pasta-raiz onde ficam as pastas dos clientes (ex.: `Clientes/`).
-3. Escolha como achar a pasta (domínio do e-mail, nome da empresa, Pipedrive).
-4. Se quiser, preencha o mapa `dominio.com=ID_DA_PASTA` para clientes com nome de pasta irregular.
-5. *Salvar configuração*. Nos e-mails que falarem de contrato/proposta/NF etc., o rascunho usa essa pasta.
+3. **Recomendado:** chave do campo personalizado do Pipedrive (negócio) com o link da pasta — ex. o hash do campo “Drive”. Assim a pasta é exata mesmo com milhares de pastas.
+4. Sem link no Pipedrive, o app busca por nome (`name contains`) sob a raiz (não lista as 2.000 pastas). Domínios genéricos (gmail, hotmail…) são ignorados.
+5. Deixe *Ler conteúdo* **desligado** se quiser só nomes/datas (melhor com docs pessoais). Ligue só se precisar de trechos no rascunho.
+6. *Salvar configuração*.
 
 (Opcional: as mesmas variáveis `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` no `.env` ainda funcionam como reserva se a tela estiver vazia.)
 
