@@ -1,5 +1,5 @@
 import { marked } from 'marked';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type Item, type PublicSettings, type Risk, type SettingsPatch, type StatusInfo } from './api';
 
 const RISK_LABEL: Record<Risk, string> = { low: 'Baixo', medium: 'Médio', high: 'Alto' };
@@ -162,6 +162,64 @@ export function App() {
   );
 }
 
+function SignatureHtmlEditor({
+  html, onChange, onError,
+}: { html: string; onChange: (html: string) => void; onError: (msg: string | null) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function onPickFile(file: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      onError('Escolha uma imagem (PNG, JPEG, GIF ou WebP).');
+      return;
+    }
+    setUploading(true);
+    onError(null);
+    try {
+      const { url } = await api.uploadSignatureAsset(file);
+      const alt = file.name.replace(/\.[^.]+$/, '');
+      onChange(`${html.trim() ? `${html.trim()}<br>` : ''}<img src="${url}" alt="${alt}" style="max-width:280px;height:auto" />`);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  return (
+    <div className="sig-editor">
+      <div className="sig-toolbar">
+        <button type="button" className="btn" disabled={uploading} onClick={() => fileRef.current?.click()}>
+          {uploading ? 'Enviando…' : 'Inserir imagem'}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          hidden
+          onChange={(e) => void onPickFile(e.target.files?.[0] ?? null)}
+        />
+        <span className="hint">Cole HTML do Gmail ou monte abaixo. Imagens ficam neste computador e vão embutidas no e-mail.</span>
+      </div>
+      <textarea
+        className="sig-html"
+        rows={8}
+        value={html}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={'Ex.: <p><b>Ana</b> · Comercial<br>Minha Empresa</p>\n<img src="…" alt="logo" />'}
+      />
+      {html.trim() ? (
+        <div className="sig-preview">
+          <div className="hint">Pré-visualização</div>
+          <div className="sig-preview-body" dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SetupChecklist({ setup, onOpenDocs }: { setup: StatusInfo['setup']; onOpenDocs: () => void }) {
   const Step = ({ ok, children }: { ok: boolean; children: ReactNode }) => (
     <li className={ok ? 'step ok' : 'step'}>{ok ? '✓' : '○'} {children}</li>
@@ -269,6 +327,9 @@ function SettingsPage({
   const [companyName, setCompanyName] = useState('');
   const [signature, setSignature] = useState('');
   const [signatureEn, setSignatureEn] = useState('');
+  const [signatureHtml, setSignatureHtml] = useState('');
+  const [signatureHtmlEn, setSignatureHtmlEn] = useState('');
+  const [sigLang, setSigLang] = useState<'pt' | 'en'>('pt');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [secretTouched, setSecretTouched] = useState(false);
@@ -289,6 +350,8 @@ function SettingsPage({
       setCompanyName(cur.company.name);
       setSignature(cur.company.signature);
       setSignatureEn(cur.company.signatureEn);
+      setSignatureHtml(cur.company.signatureHtml ?? '');
+      setSignatureHtmlEn(cur.company.signatureHtmlEn ?? '');
       setClientId(cur.google.clientId);
       setBaseUrl(cur.llm.baseUrl || VERCEL_GATEWAY);
       setModel(cur.llm.model || 'openai/gpt-4.1');
@@ -300,7 +363,7 @@ function SettingsPage({
     setBusy(true); setErr(null); setMsg(null);
     try {
       const patch: SettingsPatch = {
-        company: { name: companyName, signature, signatureEn },
+        company: { name: companyName, signature, signatureEn, signatureHtml, signatureHtmlEn },
         google: { clientId },
         llm: { baseUrl, model },
         pipedrive: { domain },
@@ -330,10 +393,21 @@ function SettingsPage({
       {setup && !setup.ready && <SetupChecklist setup={setup} onOpenDocs={onOpenDocs} />}
 
       <section className="form-block">
-        <h3>1. Empresa</h3>
+        <h3>1. Empresa e assinatura</h3>
         <label>Nome da empresa<input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Minha Empresa" /></label>
-        <label>Assinatura (português)<input value={signature} onChange={(e) => setSignature(e.target.value)} placeholder="Equipe Minha Empresa" /></label>
-        <label>Assinatura (inglês)<input value={signatureEn} onChange={(e) => setSignatureEn(e.target.value)} placeholder="Minha Empresa Team" /></label>
+        <p className="hint">Assinatura curta (texto) entra no prompt do modelo. A assinatura rica (HTML + imagens) é a que o cliente vê no Gmail, como a assinatura oficial.</p>
+        <label>Assinatura curta (português)<input value={signature} onChange={(e) => setSignature(e.target.value)} placeholder="Equipe Minha Empresa" /></label>
+        <label>Assinatura curta (inglês)<input value={signatureEn} onChange={(e) => setSignatureEn(e.target.value)} placeholder="Minha Empresa Team" /></label>
+
+        <div className="tabs sig-tabs">
+          <button type="button" className={sigLang === 'pt' ? 'tab on' : 'tab'} onClick={() => setSigLang('pt')}>Assinatura HTML (PT)</button>
+          <button type="button" className={sigLang === 'en' ? 'tab on' : 'tab'} onClick={() => setSigLang('en')}>Assinatura HTML (EN)</button>
+        </div>
+        <SignatureHtmlEditor
+          html={sigLang === 'pt' ? signatureHtml : signatureHtmlEn}
+          onChange={(h) => (sigLang === 'pt' ? setSignatureHtml(h) : setSignatureHtmlEn(h))}
+          onError={setErr}
+        />
       </section>
 
       <section className="form-block">

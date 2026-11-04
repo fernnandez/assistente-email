@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { config } from './config';
 import type { Store } from './db';
+import { materializeDataUrls, signaturePlainFromHtml } from './signature';
 
 const SETTINGS_KEY = 'settings';
 
@@ -9,6 +10,8 @@ const storedSchema = z.object({
     name: z.string().optional(),
     signature: z.string().optional(),
     signatureEn: z.string().optional(),
+    signatureHtml: z.string().optional(),
+    signatureHtmlEn: z.string().optional(),
   }).optional(),
   google: z.object({
     clientId: z.string().optional(),
@@ -32,6 +35,8 @@ export const settingsPatchSchema = z.object({
     name: z.string().max(200).optional(),
     signature: z.string().max(500).optional(),
     signatureEn: z.string().max(500).optional(),
+    signatureHtml: z.string().max(200_000).optional(),
+    signatureHtmlEn: z.string().max(200_000).optional(),
   }).optional(),
   google: z.object({
     clientId: z.string().max(300).optional(),
@@ -52,14 +57,26 @@ export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 
 /** Config efetiva: o que foi salvo na UI sobrescreve o .env; campo vazio na UI cai no .env. */
 export interface RuntimeSecrets {
-  company: { name: string; signature: string; signatureEn: string };
+  company: {
+    name: string;
+    signature: string;
+    signatureEn: string;
+    signatureHtml: string;
+    signatureHtmlEn: string;
+  };
   google: { clientId: string; clientSecret: string };
   llm: { baseUrl: string; apiKey: string; model: string };
   pipedrive: { domain: string; token: string };
 }
 
 export interface PublicSettings {
-  company: { name: string; signature: string; signatureEn: string };
+  company: {
+    name: string;
+    signature: string;
+    signatureEn: string;
+    signatureHtml: string;
+    signatureHtmlEn: string;
+  };
   google: { clientId: string; clientSecretConfigured: boolean };
   llm: { baseUrl: string; apiKeyConfigured: boolean; model: string };
   pipedrive: { domain: string; tokenConfigured: boolean };
@@ -98,11 +115,17 @@ function pick(ui: string | undefined, env: string): string {
 
 export function runtime(store: Store | null = bound): RuntimeSecrets {
   const s = store ? readStored(store) : {};
+  const signature = pick(s.company?.signature, config.signature);
+  const signatureEn = pick(s.company?.signatureEn, config.signatureEn);
+  const signatureHtml = (s.company?.signatureHtml ?? '').trim();
+  const signatureHtmlEn = (s.company?.signatureHtmlEn ?? '').trim();
   return {
     company: {
       name: pick(s.company?.name, config.company),
-      signature: pick(s.company?.signature, config.signature),
-      signatureEn: pick(s.company?.signatureEn, config.signatureEn),
+      signature: signatureHtml ? signaturePlainFromHtml(signatureHtml, signature) : signature,
+      signatureEn: signatureHtmlEn ? signaturePlainFromHtml(signatureHtmlEn, signatureEn) : signatureEn,
+      signatureHtml,
+      signatureHtmlEn,
     },
     google: {
       clientId: pick(s.google?.clientId, config.google.clientId),
@@ -121,9 +144,17 @@ export function runtime(store: Store | null = bound): RuntimeSecrets {
 }
 
 export function publicSettings(store: Store): PublicSettings {
+  const s = readStored(store);
   const r = runtime(store);
   return {
-    company: { ...r.company },
+    company: {
+      name: r.company.name,
+      // devolve o texto curto salvo (não o derivado do HTML) para o formulário
+      signature: pick(s.company?.signature, config.signature),
+      signatureEn: pick(s.company?.signatureEn, config.signatureEn),
+      signatureHtml: r.company.signatureHtml,
+      signatureHtmlEn: r.company.signatureHtmlEn,
+    },
     google: { clientId: r.google.clientId, clientSecretConfigured: !!r.google.clientSecret },
     llm: { baseUrl: r.llm.baseUrl, apiKeyConfigured: !!r.llm.apiKey, model: r.llm.model },
     pipedrive: { domain: r.pipedrive.domain, tokenConfigured: !!r.pipedrive.token },
@@ -144,6 +175,12 @@ export function saveSettings(store: Store, patch: SettingsPatch): PublicSettings
     if (patch.company.name !== undefined) next.company!.name = patch.company.name.trim();
     if (patch.company.signature !== undefined) next.company!.signature = patch.company.signature.trim();
     if (patch.company.signatureEn !== undefined) next.company!.signatureEn = patch.company.signatureEn.trim();
+    if (patch.company.signatureHtml !== undefined) {
+      next.company!.signatureHtml = materializeDataUrls(patch.company.signatureHtml);
+    }
+    if (patch.company.signatureHtmlEn !== undefined) {
+      next.company!.signatureHtmlEn = materializeDataUrls(patch.company.signatureHtmlEn);
+    }
   }
   if (patch.google) {
     if (patch.google.clientId !== undefined) next.google!.clientId = patch.google.clientId.trim();
@@ -189,7 +226,7 @@ export function setupStatus(args: {
   const r = runtime(args.store);
   const google = !!(r.google.clientId && r.google.clientSecret);
   const llm = !!r.llm.apiKey;
-  const company = !!(r.company.name && r.company.signature);
+  const company = !!(r.company.name && (r.company.signature || r.company.signatureHtml));
   const pipedrive = !!(r.pipedrive.domain && r.pipedrive.token);
   const policies = args.policiesCount > 0;
   const gmail = args.gmailConnected;

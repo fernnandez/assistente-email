@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { config, redirectUri } from './config';
 import type { Store } from './db';
 import { runtime } from './settings';
+import { composeMailBodies } from './signature';
 import type { IncomingEmail } from './types';
 
 export const SCOPES = [
@@ -101,19 +102,68 @@ export function parseMessage(msg: GmailMessage, selfEmail = ''): IncomingEmail {
 
 const encodeHeader = (s: string) => (/^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${Buffer.from(s, 'utf8').toString('base64')}?=`);
 
-/** Monta o e-mail (RFC 2822) em base64url, como a API do Gmail espera. */
-export function buildRawMessage(a: { to: string; subject: string; body: string; inReplyTo?: string; references?: string }): string {
-  const lines = [
+const b64fold = (buf: Buffer | string) => (Buffer.from(buf).toString('base64').match(/.{1,76}/g) ?? []).join('\r\n');
+
+export interface InlinePart {
+  cid: string;
+  contentType: string;
+  buf: Buffer;
+}
+
+/** Monta o e-mail (RFC 2822) em base64url. Com html+imagens → multipart (como assinatura do Gmail). */
+export function buildRawMessage(a: {
+  to: string;
+  subject: string;
+  body: string;
+  html?: string;
+  images?: InlinePart[];
+  inReplyTo?: string;
+  references?: string;
+}): string {
+  const headers = [
     `To: ${a.to}`,
     `Subject: ${encodeHeader(a.subject)}`,
     ...(a.inReplyTo ? [`In-Reply-To: ${a.inReplyTo}`, `References: ${[a.references, a.inReplyTo].filter(Boolean).join(' ').trim()}`] : []),
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
-    '',
-    (Buffer.from(a.body, 'utf8').toString('base64').match(/.{1,76}/g) ?? []).join('\r\n'),
   ];
-  return b64urlEncode(lines.join('\r\n'));
+
+  let mimeBody: string;
+  if (!a.html?.trim()) {
+    headers.push('Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64');
+    mimeBody = b64fold(a.body);
+  } else {
+    const images = a.images ?? [];
+    const alt = `alt_${randomBytes(8).toString('hex')}`;
+    const rel = `rel_${randomBytes(8).toString('hex')}`;
+    const plainPart = [
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      b64fold(a.body),
+    ].join('\r\n');
+    const htmlPart = [
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      b64fold(a.html),
+    ].join('\r\n');
+    let relatedInner = htmlPart;
+    if (images.length) {
+      const parts = [htmlPart, ...images.map((img) => [
+        `Content-Type: ${img.contentType}`,
+        'Content-Transfer-Encoding: base64',
+        `Content-ID: <${img.cid}>`,
+        'Content-Disposition: inline',
+        '',
+        b64fold(img.buf),
+      ].join('\r\n'))];
+      relatedInner = [`Content-Type: multipart/related; boundary="${rel}"`, '', ...parts.flatMap((p) => [`--${rel}`, p]), `--${rel}--`].join('\r\n');
+    }
+    headers.push(`Content-Type: multipart/alternative; boundary="${alt}"`);
+    mimeBody = [`--${alt}`, plainPart, `--${alt}`, relatedInner, `--${alt}--`].join('\r\n');
+  }
+
+  return b64urlEncode([...headers, '', mimeBody].join('\r\n'));
 }
 
 // ───────── cliente (OAuth + API) ─────────
@@ -276,7 +326,21 @@ export class GmailClient {
 
   // rascunhos
   private draftBody(a: DraftArgs) {
-    return { message: { threadId: a.threadId, raw: buildRawMessage(a) } };
+    const composed = composeMailBodies(a.body, runtime(this.store).company);
+    return {
+      message: {
+        threadId: a.threadId,
+        raw: buildRawMessage({
+          to: a.to,
+          subject: a.subject,
+          body: composed.text,
+          html: composed.html,
+          images: composed.images,
+          inReplyTo: a.inReplyTo,
+          references: a.references,
+        }),
+      },
+    };
   }
   async createDraft(a: DraftArgs): Promise<string> {
     return (await this.api<{ id: string }>('/drafts', { method: 'POST', body: this.draftBody(a) })).id;

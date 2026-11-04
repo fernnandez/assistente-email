@@ -67,4 +67,15 @@ describe('buildRawMessage', () => {
     expect(text).toContain('Subject: Re: Hello');
     expect(text).not.toContain('In-Reply-To');
   });
+  it('com HTML monta multipart/alternative', () => {
+    const text = decode(buildRawMessage({
+      to: 'a@b.com', subject: 'Hi', body: 'Olá',
+      html: '<p>Olá</p><br><img src="cid:abc" />',
+      images: [{ cid: 'abc', contentType: 'image/png', buf: Buffer.from([0x89, 0x50]) }],
+    }));
+    expect(text).toContain('multipart/alternative');
+    expect(text).toContain('multipart/related');
+    expect(text).toContain('Content-ID: <abc>');
+    expect(text).toContain('text/html');
+  });
 });

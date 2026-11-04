@@ -30,14 +30,26 @@ export interface StatusInfo {
 }
 
 export interface PublicSettings {
-  company: { name: string; signature: string; signatureEn: string };
+  company: {
+    name: string;
+    signature: string;
+    signatureEn: string;
+    signatureHtml: string;
+    signatureHtmlEn: string;
+  };
   google: { clientId: string; clientSecretConfigured: boolean };
   llm: { baseUrl: string; apiKeyConfigured: boolean; model: string };
   pipedrive: { domain: string; tokenConfigured: boolean };
 }
 
 export interface SettingsPatch {
-  company?: { name?: string; signature?: string; signatureEn?: string };
+  company?: {
+    name?: string;
+    signature?: string;
+    signatureEn?: string;
+    signatureHtml?: string;
+    signatureHtmlEn?: string;
+  };
   google?: { clientId?: string; clientSecret?: string };
   llm?: { baseUrl?: string; apiKey?: string; model?: string };
   pipedrive?: { domain?: string; token?: string };
@@ -77,4 +89,20 @@ export const api = {
   createPolicy: (name: string, content = '') => call<{ name: string }>('/api/policies', 'POST', { name, content }),
   deletePolicy: (name: string) => call<{ ok: boolean }>(`/api/policies/${encodeURIComponent(name)}`, 'DELETE', {}),
   seedPolicies: () => call<{ copied: string[]; skipped: string[] }>('/api/policies/seed-examples', 'POST', {}),
+  uploadSignatureAsset: (file: File) => {
+    return new Promise<{ name: string; url: string }>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Falha ao ler a imagem.'));
+      reader.onload = () => {
+        const dataUrl = String(reader.result ?? '');
+        const dataBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1]! : dataUrl;
+        void call<{ name: string; url: string }>('/api/signature-assets', 'POST', {
+          filename: file.name,
+          contentType: file.type,
+          dataBase64,
+        }).then(resolve, reject);
+      };
+      reader.readAsDataURL(file);
+    });
+  },
 };

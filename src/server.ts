@@ -13,6 +13,7 @@ import { buildReply, defaultDeps, draftArgsFor, emailFromItem, type PipelineDeps
 import { bus, type Poller } from './poller';
 import { loadPolicies } from './policies';
 import { bindSettings, configProblems, publicSettings, runtime, saveSettings, settingsPatchSchema, setupStatus } from './settings';
+import { readAsset, saveAsset } from './signature';
 import type { Item } from './types';
 
 export interface ServerCtx {
@@ -75,6 +76,21 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
     const out = saveSettings(store, patch);
     bus.emit('change', { type: 'status' });
     return out;
+  });
+
+  // ── imagens da assinatura (preview local + CID no envio)
+  app.get('/api/signature-assets/:name', async (req, reply) => {
+    const { name } = req.params as { name: string };
+    const { buf, contentType } = readAsset(name);
+    return reply.type(contentType).header('Cache-Control', 'private, max-age=86400').send(buf);
+  });
+  app.post('/api/signature-assets', async (req) => {
+    const body = z.object({
+      filename: z.string().max(200).optional(),
+      contentType: z.string().max(100).optional(),
+      dataBase64: z.string().min(1),
+    }).parse(req.body ?? {});
+    return saveAsset(body);
   });
 
   // ── guias (docs/*.md, só leitura)

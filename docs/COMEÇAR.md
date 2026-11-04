@@ -15,7 +15,7 @@ Este app roda **só no seu computador**. Nada é enviado ao cliente sem você ap
 ## 2. Configuração inicial (aba Configuração)
 O app já abre nessa aba se faltar algo. Preencha e clique em **Salvar configuração**:
 
-1. **Empresa** — nome e assinatura das respostas.
+1. **Empresa** — nome, assinatura curta (texto) e assinatura HTML (pode colar a do Gmail e **Inserir imagem**).
 2. **Modelo (LLM)** — botão *Vercel AI Gateway* + cole a chave da API.
 3. **Google** — Client ID e Client Secret (passo a passo em `CONFIGURAR-GOOGLE.md` em Documentos). **Salve**, depois **Conectar Gmail** e autorize a conta de trabalho.
 4. **Pipedrive** (opcional) — domínio (antes de `.pipedrive.com`) e token de API.
