@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { Store } from '../src/db';
 import { buildServer } from '../src/server';
 import { handleIncoming } from '../src/pipeline';
+import { syncPrevious } from '../src/poller';
 import { deps, email, fakeGmail, okModel } from './helpers';
 import type { GmailClient } from '../src/gmail';
 
@@ -10,11 +11,20 @@ const H = { host: '127.0.0.1:3210', 'x-requested-with': 'assistente-email', 'con
 function setup() {
   const store = new Store(':memory:');
   const g = fakeGmail();
-  const gmail = Object.assign(g, { isConnected: () => true, needsReauth: () => false, email: () => 'ela@empresa.com', disconnect: () => {} }) as unknown as GmailClient;
-  const poller = { tick: async () => {}, stop: () => {} };
   const d = deps({ model: async () => okModel({ reply_body: 'Nova resposta gerada.' }) });
+  const gmail = Object.assign(g, {
+    isConnected: () => true,
+    needsReauth: () => false,
+    email: () => 'ela@empresa.com',
+    disconnect: () => {},
+  }) as unknown as GmailClient;
+  const poller = {
+    tick: async () => {},
+    stop: () => {},
+    syncPrevious: () => syncPrevious({ store, gmail, deps: d }),
+  };
   const app = buildServer({ store, gmail, poller, deps: d, port: 3210 });
-  return { store, g, app, d };
+  return { store, g, app, d, gmail };
 }
 
 describe('segurança do servidor local', () => {
@@ -67,6 +77,16 @@ describe('API da fila', () => {
     expect((await s.app.inject({ method: 'GET', url: '/api/items?status=pending', headers: H })).json()).toHaveLength(0);
   });
 
+  it('arquivar: apaga rascunho, arquiva no Gmail e tira da fila', async () => {
+    const r = await s.app.inject({ method: 'POST', url: `/api/items/${id}/archive`, headers: H, payload: {} });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().status).toBe('archived');
+    expect(s.g.calls.map((c) => c.fn)).toEqual(['deleteDraft', 'archiveMessage']);
+    expect(s.g.calls.find((c) => c.fn === 'archiveMessage')!.args[0]).toBe('m1');
+    expect((await s.app.inject({ method: 'GET', url: '/api/items?status=pending', headers: H })).json()).toHaveLength(0);
+    expect(s.store.counts().archived).toBe(1);
+  });
+
   it('refazer: gera de novo com a instrução e atualiza o rascunho', async () => {
     const r = await s.app.inject({ method: 'POST', url: `/api/items/${id}/regenerate`, headers: H, payload: { instruction: 'mais curto' } });
     expect(r.json().reply_body).toContain('Nova resposta gerada.');
@@ -82,5 +102,30 @@ describe('API da fila', () => {
   it('item inexistente e corpo inválido', async () => {
     expect((await s.app.inject({ method: 'GET', url: '/api/items/999', headers: H })).statusCode).toBe(404);
     expect((await s.app.inject({ method: 'PUT', url: `/api/items/${id}/draft`, headers: H, payload: { reply_body: '' } })).statusCode).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe('API sync de anteriores', () => {
+  it('processa IDs novos e pula os já existentes', async () => {
+    const s = setup();
+    await handleIncoming(email({ id: 'já-tem' }), { store: s.store, gmail: s.g, deps: s.d });
+    s.g.calls.length = 0;
+
+    s.g.listRecentInboxIds = async () => {
+      s.g.calls.push({ fn: 'listRecentInboxIds', args: [] });
+      return ['já-tem', 'novo-1'];
+    };
+    s.g.getEmail = async (...args: unknown[]) => {
+      const id = String(args[0]);
+      s.g.calls.push({ fn: 'getEmail', args: [id] });
+      return email({ id, subject: `Assunto ${id}` });
+    };
+
+    const r = await s.app.inject({ method: 'POST', url: '/api/sync', headers: H, payload: {} });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ listed: 2, processed: 1, skipped: 1 });
+    expect(s.store.hasMessage('novo-1')).toBe(true);
+    expect(s.g.calls.map((c) => c.fn)).toContain('listRecentInboxIds');
+    expect(s.g.calls.filter((c) => c.fn === 'getEmail').map((c) => c.args[0])).toEqual(['novo-1']);
   });
 });

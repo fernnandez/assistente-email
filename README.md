@@ -80,7 +80,7 @@ Notas do Pipedrive que começam com `[INTERNO]` e atividades futuras (agenda int
 
 ## Segurança
 - O servidor escuta **somente em 127.0.0.1** e recusa `Host`/`Origin` de outros endereços e escritas sem o cabeçalho próprio (proteção contra um site aberto no navegador chamar o app: CSRF e DNS rebinding).
-- Escopos do Gmail mínimos: leitura e rascunho/envio (`gmail.readonly`, `gmail.compose`). Não pede acesso total à caixa.
+- Escopos do Gmail: leitura, rascunho/envio e modificar labels (`gmail.readonly`, `gmail.compose`, `gmail.modify` — para arquivar). Não pede acesso total à caixa.
 - O modelo **não tem ferramentas**: só recebe contexto e devolve texto; o e-mail é tratado como dado, não como instrução.
 - O token de atualização do Google, as chaves salvas na Configuração e os e-mails ficam em `data/assistente.db` (SQLite, **sem criptografia**) no computador. Proteja o disco/usuário do sistema. Cofre do sistema operacional é um próximo passo.
 - Os e-mails e dados do Pipedrive são enviados ao provedor do modelo. Confirme se isso é compatível com as obrigações de confidencialidade da empresa.

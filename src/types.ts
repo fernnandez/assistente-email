@@ -3,7 +3,7 @@ export type Risk = 'low' | 'medium' | 'high';
 export const CATEGORIES = ['duvida_produto', 'preco', 'suporte', 'reembolso', 'comercial', 'outro'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
-export type ItemStatus = 'pending' | 'sent' | 'discarded' | 'ignored' | 'error';
+export type ItemStatus = 'pending' | 'sent' | 'discarded' | 'archived' | 'ignored' | 'error';
 
 /** E-mail recebido, já normalizado. */
 export interface IncomingEmail {

@@ -133,7 +133,7 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
   // ── fila
   app.get('/api/items', async (req) => {
     const s = (req.query as { status?: string }).status;
-    const status = s === 'pending' || s === 'sent' || s === 'discarded' || s === 'error' ? s : 'visible';
+    const status = s === 'pending' || s === 'sent' || s === 'discarded' || s === 'archived' || s === 'error' ? s : 'visible';
     return store.listItems(status).map(view);
   });
   const idParam = z.object({ id: z.coerce.number().int().positive() });
@@ -193,6 +193,24 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
     return view(out);
   });
 
+  app.post('/api/items/:id/archive', async (req) => {
+    const item = getItem(req.params);
+    if (item.status !== 'pending' && item.status !== 'error') {
+      throw Object.assign(new Error('Só dá para arquivar itens pendentes ou com erro.'), { statusCode: 409 });
+    }
+    if (item.draft_id) {
+      try { await gmail.deleteDraft(item.draft_id); } catch (e) { if (!(e instanceof GmailError && e.status === 404)) throw e; }
+    }
+    try {
+      await gmail.archiveMessage(item.gmail_message_id);
+    } catch (e) {
+      if (!(e instanceof GmailError && e.status === 404)) throw e;
+    }
+    const out = store.updateItem(item.id, { status: 'archived', draft_id: null });
+    bus.emit('change', { type: 'item', id: item.id, status: 'archived' });
+    return view(out);
+  });
+
   app.post('/api/items/:id/regenerate', async (req) => {
     const item = getItem(req.params);
     if (item.status !== 'pending' && item.status !== 'error') throw Object.assign(new Error('Só dá para refazer itens pendentes ou com erro.'), { statusCode: 409 });
@@ -211,6 +229,12 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
   app.post('/api/poll', async () => {
     await ctx.poller.tick();
     return { ok: true };
+  });
+
+  app.post('/api/sync', async () => {
+    if (!gmail.isConnected()) throw Object.assign(new Error('Gmail não conectado.'), { statusCode: 401 });
+    const result = await ctx.poller.syncPrevious();
+    return result;
   });
 
   // ── atualizações em tempo real (SSE)

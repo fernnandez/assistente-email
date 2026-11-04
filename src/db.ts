@@ -98,7 +98,7 @@ export class Store {
 
   counts(): Record<ItemStatus, number> {
     const rows = this.db.prepare('SELECT status, count(*) AS n FROM items GROUP BY status').all() as { status: ItemStatus; n: number }[];
-    const out: Record<ItemStatus, number> = { pending: 0, sent: 0, discarded: 0, ignored: 0, error: 0 };
+    const out: Record<ItemStatus, number> = { pending: 0, sent: 0, discarded: 0, archived: 0, ignored: 0, error: 0 };
     for (const r of rows) out[r.status] = r.n;
     return out;
   }

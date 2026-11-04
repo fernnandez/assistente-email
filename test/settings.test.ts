@@ -12,7 +12,16 @@ function appWithStore() {
     isConnected: () => false, needsReauth: () => false, email: () => null, disconnect: () => {},
     startAuth: () => ({ url: 'https://example.com' }),
   } as unknown as GmailClient;
-  const app = buildServer({ store, gmail, poller: { tick: async () => {}, stop: () => {} }, port: 3210 });
+  const app = buildServer({
+    store,
+    gmail,
+    poller: {
+      tick: async () => {},
+      stop: () => {},
+      syncPrevious: async () => ({ listed: 0, processed: 0, skipped: 0, errors: [] }),
+    },
+    port: 3210,
+  });
   return { store, app };
 }
 

@@ -8,7 +8,53 @@ import { runtime } from './settings';
 /** Avisa a interface (SSE) de que algo mudou. */
 export const bus = new EventEmitter();
 
-export interface Poller { tick: () => Promise<void>; stop: () => void }
+export interface Poller { tick: () => Promise<void>; stop: () => void; syncPrevious: () => Promise<SyncResult> }
+
+export interface SyncResult {
+  listed: number;
+  processed: number;
+  skipped: number;
+  errors: string[];
+}
+
+/** Traz e-mails não lidos da inbox (últimos N dias) sem alterar o history_id do poll. */
+export async function syncPrevious(args: {
+  store: Store;
+  gmail: GmailClient;
+  deps?: PipelineDeps;
+  newerThanDays?: number;
+  max?: number;
+}): Promise<SyncResult> {
+  const { store, gmail } = args;
+  const ids = await gmail.listRecentInboxIds({
+    newerThanDays: args.newerThanDays ?? 7,
+    max: args.max ?? 30,
+    unreadOnly: true,
+  });
+  let processed = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+  const model = runtime(store).llm.model;
+  for (const id of ids) {
+    if (store.hasMessage(id)) {
+      skipped++;
+      continue;
+    }
+    try {
+      const email = await gmail.getEmail(id);
+      const item = await handleIncoming(email, { store, gmail, deps: args.deps, model });
+      if (!item || item.status === 'ignored') skipped++;
+      else {
+        processed++;
+        bus.emit('change', { type: 'item', id: item.id, status: item.status });
+      }
+    } catch (e) {
+      errors.push(`${id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  bus.emit('change', { type: 'status' });
+  return { listed: ids.length, processed, skipped, errors };
+}
 
 export function startPoller(args: { store: Store; gmail: GmailClient; deps?: PipelineDeps; intervalMs?: number }): Poller {
   const { store, gmail } = args;
@@ -37,5 +83,9 @@ export function startPoller(args: { store: Store; gmail: GmailClient; deps?: Pip
 
   const timer = setInterval(() => void tick(), (args.intervalMs ?? config.pollSeconds * 1000));
   void tick();
-  return { tick, stop: () => clearInterval(timer) };
+  return {
+    tick,
+    stop: () => clearInterval(timer),
+    syncPrevious: () => syncPrevious({ store, gmail, deps: args.deps }),
+  };
 }

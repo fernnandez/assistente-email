@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { api, type Item, type PublicSettings, type Risk, type SettingsPatch, type StatusInfo } from './api';
 
 const RISK_LABEL: Record<Risk, string> = { low: 'Baixo', medium: 'Médio', high: 'Alto' };
-const STATUS_LABEL: Record<string, string> = { pending: 'Aguardando', sent: 'Enviado', discarded: 'Descartado', error: 'Erro', ignored: 'Ignorado' };
+const STATUS_LABEL: Record<string, string> = { pending: 'Aguardando', sent: 'Enviado', discarded: 'Descartado', archived: 'Arquivado', error: 'Erro', ignored: 'Ignorado' };
 
 type Page = 'fila' | 'config' | 'docs';
 
@@ -25,6 +25,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>('Notification' in window ? Notification.permission : 'unsupported');
   const [welcomed, setWelcomed] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -82,7 +84,27 @@ export function App() {
               <a className="btn primary" href="/auth/google">{status?.gmail.needsReauth ? 'Reconectar Gmail' : 'Conectar Gmail'}</a>
             )}
             <span className="chip">Última verificação: {ago(status?.lastPollAt ?? null)}</span>
-            <button className="btn" onClick={() => void api.poll().then(refresh)} disabled={!status?.gmail.connected}>Verificar agora</button>
+            <button className="btn" onClick={() => void api.poll().then(refresh)} disabled={!status?.gmail.connected || syncing}>Verificar agora</button>
+            <button
+              className="btn"
+              disabled={!status?.gmail.connected || syncing}
+              onClick={() => {
+                const ok = window.confirm(
+                  'Buscar e-mails não lidos da inbox dos últimos 7 dias (até 30) e gerar rascunhos?\n\nIsso usa o modelo de linguagem (custa por e-mail). Itens já processados são ignorados.',
+                );
+                if (!ok) return;
+                setSyncing(true);
+                setSyncMsg(null);
+                setError(null);
+                void api.sync()
+                  .then((r) => {
+                    setSyncMsg(`Sync: ${r.processed} processado(s), ${r.skipped} ignorado(s)${r.errors.length ? `, ${r.errors.length} erro(s)` : ''}.`);
+                    return refresh();
+                  })
+                  .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+                  .finally(() => setSyncing(false));
+              }}
+            >{syncing ? 'Sincronizando…' : 'Sincronizar anteriores'}</button>
             {perm === 'default' && <button className="btn" onClick={() => void Notification.requestPermission().then(setPerm)}>Ativar avisos</button>}
             {status?.gmail.connected && <button className="btn link" onClick={() => void api.disconnect().then(refresh)}>Desconectar</button>}
           </div>
@@ -90,6 +112,7 @@ export function App() {
       </header>
 
       {error && <div className="banner error">{error}</div>}
+      {syncMsg && page === 'fila' && <div className="banner ok">{syncMsg}</div>}
       {status?.lastError && page === 'fila' && <div className="banner error">Problema na última verificação: {status.lastError}</div>}
       {status && status.problems.length > 0 && page !== 'config' && (
         <div className="banner warn">
@@ -212,6 +235,12 @@ function Detail({ item, onChange }: { item: Item; onChange: () => Promise<void> 
           <button className="btn primary" disabled={!!busy || !text.trim()} onClick={() => void run('send', () => api.send(item.id, text), 'Enviar esta resposta agora para ' + item.from_email + '?')}>{busy === 'send' ? 'Enviando…' : 'Enviar'}</button>
           <button className="btn" disabled={!!busy || !dirty} onClick={() => void run('save', () => api.save(item.id, text))}>{busy === 'save' ? 'Salvando…' : 'Salvar rascunho'}</button>
           <button className="btn danger" disabled={!!busy} onClick={() => void run('discard', () => api.discard(item.id), 'Descartar este rascunho? O e-mail original continua na sua caixa.')}>Descartar</button>
+          <button className="btn" disabled={!!busy} onClick={() => void run('archive', () => api.archive(item.id), 'Arquivar no Gmail (sai da inbox) e tirar da fila? O rascunho será apagado.')}>{busy === 'archive' ? 'Arquivando…' : 'Arquivar'}</button>
+        </div>
+      )}
+      {item.status === 'error' && (
+        <div className="actions">
+          <button className="btn" disabled={!!busy} onClick={() => void run('archive', () => api.archive(item.id), 'Arquivar no Gmail (sai da inbox) e tirar da fila?')}>{busy === 'archive' ? 'Arquivando…' : 'Arquivar'}</button>
         </div>
       )}
       {(editable || item.status === 'error') && (

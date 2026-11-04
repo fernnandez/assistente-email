@@ -22,9 +22,12 @@ Tempo: ~15 minutos. Custo: zero (a Gmail API não exige faturamento).
 1. *APIs e serviços → Tela de permissão OAuth* (ou *Google Auth Platform*) → *Começar*.
 2. Nome do app (`Assistente de e-mail`), e-mail de suporte e de contato.
 3. Em **Público (Audience)**, escolha **Interno**. Se a opção não aparecer, o projeto não está na organização: volte ao passo 2.
-4. Em **Acesso a dados (Data access)**, adicione exatamente estes dois escopos:
+4. Em **Acesso a dados (Data access)**, adicione estes escopos:
    - `https://www.googleapis.com/auth/gmail.readonly`
    - `https://www.googleapis.com/auth/gmail.compose`
+   - `https://www.googleapis.com/auth/gmail.modify` (arquivar / tirar da inbox)
+
+Se o app já estava conectado sem o escopo `modify`, em **Configuração** use **Desconectar** e **Conectar Gmail** de novo para autorizar.
 
 ## 5. Criar o cliente OAuth
 *Clientes → Criar cliente* → tipo **App para computador (Desktop app)** → nome `assistente-desktop` → *Criar*.

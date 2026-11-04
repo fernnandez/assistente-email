@@ -7,6 +7,7 @@ import type { IncomingEmail } from './types';
 export const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly', // ler e-mails recebidos
   'https://www.googleapis.com/auth/gmail.compose', // criar/editar rascunhos e enviar o rascunho aprovado
+  'https://www.googleapis.com/auth/gmail.modify', // arquivar (remover da inbox) sem apagar
 ];
 
 // ───────── funções puras (testáveis) ─────────
@@ -251,6 +252,26 @@ export class GmailClient {
   async getEmail(id: string): Promise<IncomingEmail> {
     const msg = await this.api<GmailMessage>(`/messages/${id}?format=full`);
     return parseMessage(msg, this.email() ?? '');
+  }
+
+  /**
+   * Lista IDs recentes da inbox (para sync manual do que chegou antes do app).
+   * Não altera history_id — o poll incremental continua independente.
+   */
+  async listRecentInboxIds(opts: { newerThanDays?: number; max?: number; unreadOnly?: boolean } = {}): Promise<string[]> {
+    const days = opts.newerThanDays ?? 7;
+    const max = Math.min(Math.max(opts.max ?? 30, 1), 100);
+    const unreadOnly = opts.unreadOnly !== false;
+    const parts = ['in:inbox', `newer_than:${days}d`];
+    if (unreadOnly) parts.push('is:unread');
+    const q = new URLSearchParams({ q: parts.join(' '), maxResults: String(max) });
+    const r = await this.api<{ messages?: { id: string }[] }>(`/messages?${q}`);
+    return (r.messages ?? []).map((m) => m.id);
+  }
+
+  /** Arquiva: tira da inbox (label INBOX), mantém o e-mail na conta. */
+  async archiveMessage(id: string): Promise<void> {
+    await this.api(`/messages/${id}/modify`, { method: 'POST', body: { removeLabelIds: ['INBOX'] } });
   }
 
   // rascunhos

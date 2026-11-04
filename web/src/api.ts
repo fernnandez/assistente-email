@@ -1,5 +1,12 @@
 export type Risk = 'low' | 'medium' | 'high';
-export type Status = 'pending' | 'sent' | 'discarded' | 'ignored' | 'error';
+export type Status = 'pending' | 'sent' | 'discarded' | 'archived' | 'ignored' | 'error';
+
+export interface SyncResult {
+  listed: number;
+  processed: number;
+  skipped: number;
+  errors: string[];
+}
 
 export interface Customer { known: boolean; name: string | null; org: string | null; text: string }
 export interface Item {
@@ -55,8 +62,10 @@ export const api = {
   save: (id: number, reply_body: string) => call<Item>(`/api/items/${id}/draft`, 'PUT', { reply_body }),
   send: (id: number, reply_body: string) => call<Item>(`/api/items/${id}/send`, 'POST', { reply_body }),
   discard: (id: number) => call<Item>(`/api/items/${id}/discard`, 'POST', {}),
+  archive: (id: number) => call<Item>(`/api/items/${id}/archive`, 'POST', {}),
   regenerate: (id: number, instruction: string) => call<Item>(`/api/items/${id}/regenerate`, 'POST', { instruction }),
   poll: () => call<{ ok: boolean }>('/api/poll', 'POST', {}),
+  sync: () => call<SyncResult>('/api/sync', 'POST', {}),
   disconnect: () => call<{ ok: boolean }>('/api/auth/disconnect', 'POST', {}),
   settings: () => call<PublicSettings>('/api/settings'),
   saveSettings: (patch: SettingsPatch) => call<PublicSettings>('/api/settings', 'PUT', patch),

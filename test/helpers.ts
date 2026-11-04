@@ -31,5 +31,8 @@ export function fakeGmail() {
     updateDraft: rec('updateDraft', undefined),
     sendDraft: rec('sendDraft', undefined),
     deleteDraft: rec('deleteDraft', undefined),
+    archiveMessage: rec('archiveMessage', undefined),
+    listRecentInboxIds: rec('listRecentInboxIds', [] as string[]),
+    getEmail: rec('getEmail', email()),
   };
 }
