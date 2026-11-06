@@ -101,6 +101,33 @@ export function parseMessage(msg: GmailMessage, selfEmail = ''): IncomingEmail {
   };
 }
 
+const PUBLIC_MAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'yahoo.com.br',
+  'icloud.com', 'me.com', 'uol.com.br', 'bol.com.br', 'terra.com.br', 'protonmail.com', 'proton.me',
+]);
+
+export interface TeamReply { name: string; email: string; at: string }
+
+/**
+ * Procura, numa conversa, a primeira resposta da equipe enviada depois de `afterMs`.
+ * "Equipe" = mesmo domínio da caixa conectada (ou o endereço exato, se for e-mail de provedor público).
+ * Rascunhos não contam, nem mensagens do próprio cliente.
+ */
+export function findTeamReply(messages: GmailMessage[], opts: { selfEmail: string; afterMs: number; customerEmail?: string }): TeamReply | null {
+  const self = opts.selfEmail.toLowerCase();
+  const domain = self.split('@')[1] ?? '';
+  if (!domain) return null;
+  const exactOnly = PUBLIC_MAIL_DOMAINS.has(domain);
+  const customer = opts.customerEmail?.toLowerCase();
+  const found = messages
+    .filter((m) => !m.labelIds?.includes('DRAFT') && Number(m.internalDate) > opts.afterMs)
+    .sort((a, b) => Number(a.internalDate) - Number(b.internalDate))
+    .map((m) => ({ m, from: parseAddress((m.payload?.headers ?? []).find((h) => h.name.toLowerCase() === 'from')?.value ?? '') }))
+    .find(({ from }) => from.email !== customer && (exactOnly ? from.email === self : from.email.endsWith(`@${domain}`)));
+  if (!found) return null;
+  return { name: found.from.name, email: found.from.email, at: new Date(Number(found.m.internalDate)).toISOString() };
+}
+
 const encodeHeader = (s: string) => (/^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${Buffer.from(s, 'utf8').toString('base64')}?=`);
 
 const b64fold = (buf: Buffer | string) => (Buffer.from(buf).toString('base64').match(/.{1,76}/g) ?? []).join('\r\n');
@@ -307,6 +334,15 @@ export class GmailClient {
     return parseMessage(msg, this.email() ?? '');
   }
 
+  /** Alguém da equipe respondeu nesta conversa depois de `afterIso`? Lê só os cabeçalhos. */
+  async teamReplyAfter(threadId: string, afterIso: string, customerEmail?: string): Promise<TeamReply | null> {
+    const self = this.email();
+    if (!self) return null;
+    const q = new URLSearchParams([['format', 'metadata'], ['metadataHeaders', 'From']]);
+    const thread = await this.api<{ messages?: GmailMessage[] }>(`/threads/${threadId}?${q}`);
+    return findTeamReply(thread.messages ?? [], { selfEmail: self, afterMs: new Date(afterIso).getTime(), customerEmail });
+  }
+
   /**
    * Lista IDs recentes da inbox (para sync manual do que chegou antes do app).
    * Não altera history_id — o poll incremental continua independente.
@@ -414,4 +450,4 @@ export class GmailClient {
 }
 
 /** Contrato mínimo usado pelo pipeline/servidor (facilita testes com um Gmail falso). */
-export type GmailLike = Pick<GmailClient, 'createDraft' | 'updateDraft' | 'sendDraft' | 'deleteDraft'>;
+export type GmailLike = Pick<GmailClient, 'createDraft' | 'updateDraft' | 'sendDraft' | 'deleteDraft'> & Partial<Pick<GmailClient, 'teamReplyAfter'>>;

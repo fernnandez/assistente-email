@@ -269,8 +269,8 @@ export function buildServer(ctx: ServerCtx): FastifyInstance {
   app.post('/api/items/:id/regenerate', async (req) => {
     const item = getItem(req.params);
     if (item.status !== 'pending' && item.status !== 'error') throw Object.assign(new Error('Só dá para refazer itens pendentes ou com erro.'), { statusCode: 409 });
-    const { instruction } = z.object({ instruction: z.string().max(2000).optional() }).parse(req.body ?? {});
-    const built = await buildReply(emailFromItem(item), deps, instruction);
+    const { instruction, current_draft } = z.object({ instruction: z.string().max(2000).optional(), current_draft: z.string().max(20000).optional() }).parse(req.body ?? {});
+    const built = await buildReply(emailFromItem(item), deps, instruction?.trim() || undefined, current_draft ?? item.reply_body ?? undefined);
     const model = runtime(store).llm.model;
     const patch = {
       status: 'pending' as const, error: null, risk: built.reply.risk, category: built.reply.category, risk_reasons: built.reply.risk_reasons,

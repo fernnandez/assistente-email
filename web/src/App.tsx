@@ -333,6 +333,8 @@ function Detail({ item, onChange }: { item: Item; onChange: () => Promise<void> 
   const [showCrm, setShowCrm] = useState(false);
   const editable = item.status === 'pending';
   const dirty = text !== (item.reply_body ?? '');
+  // o servidor pode trocar o rascunho (Refazer, resposta da equipe detectada): a caixa acompanha
+  useEffect(() => { setText(item.reply_body ?? ''); }, [item.reply_body]);
 
   async function run(label: string, fn: () => Promise<unknown>, confirmMsg?: string) {
     if (confirmMsg && !window.confirm(confirmMsg)) return;
@@ -407,7 +409,7 @@ function Detail({ item, onChange }: { item: Item; onChange: () => Promise<void> 
       {(editable || item.status === 'error') && (
         <div className="regen">
           <input value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Refazer com uma instrução (ex.: mais curto, ofereça uma ligação)…" />
-          <button className="btn" disabled={!!busy} onClick={() => void run('regen', () => api.regenerate(item.id, instruction).then(() => setInstruction('')))}>{busy === 'regen' ? 'Gerando…' : 'Refazer'}</button>
+          <button className="btn" disabled={!!busy} onClick={() => void run('regen', () => api.regenerate(item.id, instruction, text).then((it) => { setText(it.reply_body ?? ''); setInstruction(''); }))}>{busy === 'regen' ? 'Gerando…' : 'Refazer'}</button>
         </div>
       )}
     </div>

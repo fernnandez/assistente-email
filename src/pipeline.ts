@@ -1,7 +1,7 @@
 import { applyGuardrails } from './guardrails';
 import type { Store } from './db';
 import { consultClientDocs, type DriveContext } from './drive';
-import type { DraftArgs, GmailLike } from './gmail';
+import type { DraftArgs, GmailLike, TeamReply } from './gmail';
 import { callModel, systemPrompt, type LlmResult } from './llm';
 import { loadPolicies, type PolicySet } from './policies';
 import { lookupCustomer } from './pipedrive';
@@ -29,6 +29,8 @@ export function buildUserMessage(a: {
   drive: DriveContext;
   now: Date;
   instruction?: string;
+  /** Texto que está na tela (com edições manuais), para a instrução ser aplicada em cima dele. */
+  currentDraft?: string;
 }): string {
   const today = a.now.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/Sao_Paulo' });
   const from = `${a.email.fromName ? a.email.fromName + ' ' : ''}<${a.email.fromEmail}>`;
@@ -38,6 +40,9 @@ export function buildUserMessage(a: {
     `## Políticas relevantes\n${a.policies.text || '(nenhuma política carregada)'}`,
     `## Histórico no CRM (Pipedrive)\n${a.customer.text}`,
     `## Documentos no Google Drive (cliente)\n${a.drive.text}`,
+    ...(a.instruction && a.currentDraft?.trim()
+      ? [`## Rascunho atual (a pessoa pode ter editado)\n\"\"\"\n${a.currentDraft.trim()}\n\"\"\"\nReescreva este rascunho aplicando a instrução abaixo. Preserve o que a pessoa escreveu e não pedir para mudar, e mantenha assunto, idioma e assinatura.`]
+      : []),
     ...(a.instruction ? [`## Instrução adicional da pessoa que vai revisar (siga, sem violar as regras)\n${a.instruction}`] : []),
   ].join('\n\n');
 }
@@ -45,7 +50,7 @@ export function buildUserMessage(a: {
 export interface BuiltReply { reply: GuardedReply; customer: Customer; drive: DriveContext; tokensIn: number | null; tokensOut: number | null }
 
 /** Contexto + modelo + guardrails. Não toca no Gmail (usado pela avaliação offline e pela regeneração). */
-export async function buildReply(email: IncomingEmail, deps: PipelineDeps = defaultDeps, instruction?: string): Promise<BuiltReply> {
+export async function buildReply(email: IncomingEmail, deps: PipelineDeps = defaultDeps, instruction?: string, currentDraft?: string): Promise<BuiltReply> {
   let customer: Customer;
   let crmNote = '';
   try {
@@ -80,6 +85,7 @@ export async function buildReply(email: IncomingEmail, deps: PipelineDeps = defa
       drive,
       now: (deps.now ?? (() => new Date()))(),
       instruction,
+      currentDraft,
     }),
   );
   const reply = applyGuardrails({ email, result: llm.reply, customerKnown: customer.known });
@@ -96,6 +102,13 @@ export async function buildReply(email: IncomingEmail, deps: PipelineDeps = defa
   if (notes) reply.internal_notes = notes;
   return { reply, customer, drive, tokensIn: llm.tokensIn, tokensOut: llm.tokensOut };
 }
+
+export const ANSWERED_MARK = 'JÁ RESPONDIDO';
+
+export const answeredNote = (r: TeamReply): string => {
+  const when = new Date(r.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' });
+  return `${ANSWERED_MARK} por ${r.name ? r.name + ' ' : ''}<${r.email}> em ${when}. SUGESTÃO: ARQUIVAR.`;
+};
 
 export const draftArgsFor = (item: Pick<Item, 'thread_id' | 'from_email' | 'message_id_header' | 'references_header' | 'subject'>, subject: string | null, body: string): DraftArgs => ({
   threadId: item.thread_id,
@@ -123,6 +136,14 @@ export async function handleIncoming(email: IncomingEmail, ctx: { store: Store; 
   } as const;
 
   if (email.automated || !email.fromEmail) return store.insertItem({ ...base, status: 'ignored' });
+
+  // Se a equipe já respondeu na conversa, não gasta o modelo nem cria rascunho: só sinaliza.
+  if (gmail.teamReplyAfter) {
+    try {
+      const reply = await gmail.teamReplyAfter(email.threadId, email.receivedAt, email.fromEmail);
+      if (reply) return store.insertItem({ ...base, status: 'pending', reply_body: '', internal_notes: answeredNote(reply) });
+    } catch { /* checagem é só um atalho: se falhar, segue o fluxo normal */ }
+  }
 
   try {
     const built = await buildReply(email, ctx.deps ?? defaultDeps);

@@ -19,6 +19,7 @@ function appWithStore() {
       tick: async () => {},
       stop: () => {},
       syncPrevious: async () => ({ listed: 0, processed: 0, skipped: 0, errors: [] }),
+      recheckAnswered: async () => 0,
     },
     port: 3210,
   });

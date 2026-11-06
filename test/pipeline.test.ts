@@ -68,5 +68,14 @@ describe('buildUserMessage', () => {
     expect(m).toContain('Documentos no Google Drive');
     expect(m).not.toContain('Instrução adicional');
     expect(buildUserMessage({ ...base, instruction: 'mais curto' })).toContain('Instrução adicional');
+    expect(buildUserMessage({ ...base, instruction: 'mais curto' })).not.toContain('Rascunho atual');
+  });
+
+  it('instrução com rascunho na tela: o modelo recebe o texto atual para reescrever', () => {
+    const base = { email: email(), policies, customer: known, drive: noDrive, now: new Date('2026-11-03T15:00:00Z') };
+    const m = buildUserMessage({ ...base, instruction: 'mais curto', currentDraft: 'Olá Maria, texto EDITADO à mão.' });
+    expect(m).toContain('Rascunho atual');
+    expect(m).toContain('texto EDITADO à mão');
+    expect(buildUserMessage({ ...base, currentDraft: 'x' })).not.toContain('Rascunho atual'); // sem instrução, gera do zero
   });
 });

@@ -22,6 +22,7 @@ function setup() {
     tick: async () => {},
     stop: () => {},
     syncPrevious: () => syncPrevious({ store, gmail, deps: d }),
+    recheckAnswered: async () => 0,
   };
   const app = buildServer({ store, gmail, poller, deps: d, port: 3210 });
   return { store, g, app, d, gmail };
@@ -113,6 +114,19 @@ describe('API da fila', () => {
     const r = await s.app.inject({ method: 'POST', url: `/api/items/${id}/regenerate`, headers: H, payload: { instruction: 'mais curto' } });
     expect(r.json().reply_body).toContain('Nova resposta gerada.');
     expect(s.g.calls.map((c) => c.fn)).toEqual(['updateDraft']);
+  });
+
+  it('refazer: o modelo recebe o texto atual da tela (com edições não salvas) junto com a instrução', async () => {
+    let seen = '';
+    const s2 = setup();
+    const gmail2 = s2.g;
+    const d2 = deps({ model: async (_sys, user) => { seen = user; return okModel({ reply_body: 'Versão curta.' }); } });
+    const app2 = buildServer({ store: s2.store, gmail: s2.gmail, poller: { tick: async () => {}, stop: () => {}, syncPrevious: async () => ({ listed: 0, processed: 0, skipped: 0, errors: [] }), recheckAnswered: async () => 0 }, deps: d2, port: 3210 });
+    const item = (await handleIncoming(email({ id: 'r1' }), { store: s2.store, gmail: gmail2, deps: d2 }))!;
+    const r = await app2.inject({ method: 'POST', url: `/api/items/${item.id}/regenerate`, headers: H, payload: { instruction: 'mais curto', current_draft: 'EDITADO NA TELA' } });
+    expect(r.json().reply_body).toContain('Versão curta.');
+    expect(seen).toContain('EDITADO NA TELA');
+    expect(seen).toContain('mais curto');
   });
 
   it('salvar edição sem enviar', async () => {
